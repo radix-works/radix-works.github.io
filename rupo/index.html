@@ -158,7 +158,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
       <div class="chip" id="chip"></div>
       <div class="legend"><i style="background:#fff;border:2px dashed #aeb6c4"></i>ルポ待ち　<i style="background:var(--accent)"></i>ルポ済み</div>
       <div id="cross"><i>📍</i></div>
-      <div id="placebar"><p><b>地図を動かして、中央の📍を作りたい場所に合わせてください</b></p><div class="row" style="margin:0"><button class="btn" id="pl-x">やめる</button><button class="btn pri" id="pl-ok">ここに作る</button></div></div>
+      <div id="placebar"><p><b id="pl-msg">地図を動かして、中央の📍を作りたい場所に合わせてください</b></p><div class="row" style="margin:0"><button class="btn" id="pl-x">やめる</button><button class="btn pri" id="pl-ok">ここに作る</button></div></div>
       <button class="fab" id="btn-add" title="新しいスポットを作る">＋</button>
       <button class="fab" id="btn-locate" title="現在地">◎</button>
     </section>
@@ -450,7 +450,8 @@ function refreshSheet(){
     <div class="row"><button class="btn pri" id="sh-rp">✍️ 最初のルポを書く</button><button class="btn" id="sh-nav">🧭 経路案内</button></div>`;
   }else{
     h+=`<div class="main-info"><span class="tag">✨ メイン情報</span>${mi?reportCard(mi).replace('class="rp"','class="rp" style="border:0;background:none;padding:6px 0 0;margin:0"'):'<div class="empty">まだルポがありません</div>'}</div>
-    <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>`;
+    <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>
+    ${sp.creator===S.me?'<button class="link" id="sh-mv">📍 ピンの位置を変える（作成者のみ）</button>':''}`;
     const rest=sp.reports.slice().sort((a,b)=>b.t-a.t);
     h+=`<h3>みんなのルポ（${rest.length}）</h3>`+rest.map(r=>reportCard(r)).join('');
   }
@@ -460,6 +461,7 @@ function refreshSheet(){
   const b=(i,f)=>{const e=$(i); if(e) e.onclick=f;};
   b('#sh-rp',()=>openReport(curId));
   b('#sh-arr',()=>startArrive(curId));
+  b('#sh-mv',()=>startPlace(curId));
   b('#sh-nav',()=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${sp.lat},${sp.lng}&travelmode=walking`,'_blank'));
   b('#sh-tp',()=>{ setPos(sp.lat+0.00005,sp.lng+0.00005); toast('あなたをこのスポットに移動しました'); });
 }
@@ -536,10 +538,25 @@ function openReport(id,loc){
     else { toast('ルポを投稿しました'); refreshSheet(); }
   };
 }
-function endPlace(){ $('#cross').classList.remove('on'); $('#placebar').classList.remove('on'); }
-$('#btn-add').onclick=()=>{ closeSheet(); $('#cross').classList.add('on'); $('#placebar').classList.add('on'); };
+let moveId=null;   // 位置を変えるスポット（新規作成のときは null）
+function endPlace(){ moveId=null; $('#cross').classList.remove('on'); $('#placebar').classList.remove('on'); }
+function startPlace(id){
+  moveId=id||null; closeSheet();
+  $('#pl-msg').textContent = moveId ? '地図を動かして、中央の📍を新しい位置に合わせてください' : '地図を動かして、中央の📍を作りたい場所に合わせてください';
+  $('#pl-ok').textContent = moveId ? 'ここに変更' : 'ここに作る';
+  $('#cross').classList.add('on'); $('#placebar').classList.add('on');
+}
+$('#btn-add').onclick=()=>startPlace(null);
 $('#pl-x').onclick=endPlace;
-$('#pl-ok').onclick=()=>{ const c=map.getCenter(); endPlace(); openReport(null,{lat:c.lat,lng:c.lng}); };
+$('#pl-ok').onclick=()=>{
+  const c=map.getCenter(), id=moveId; endPlace();
+  if(id){
+    const sp=S.spots[id]; if(!sp) return;
+    sp.lat=c.lat; sp.lng=c.lng; save();
+    const m=markers.get(id); if(m) m.m.setLatLng([c.lat,c.lng]);
+    renderTL(); curId=id; refreshSheet(); toast('📍 ピンの位置を変えました');
+  }else openReport(null,{lat:c.lat,lng:c.lng});
+};
 $('#btn-locate').onclick=()=>{
   if(!navigator.geolocation){ toast('この端末では現在地を取得できません'); return; }
   toast('現在地を取得中…');
