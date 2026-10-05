@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>ルポる プロトタイプ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --ink:#1b2436; --sub:#5b6579; --line:#e3e7ee; --bg:#f4f6f9; --paper:#fff;
+  --accent:#ff6a3d; --accent-d:#e4521f; --me:#2f6bff; --gray:#aeb6c4; --ok:#1f9d6b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:#dfe4ec;color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;line-height:1.6;font-size:15px}
+button{font:inherit;color:inherit;cursor:pointer}
+#app{height:100dvh;max-width:520px;margin:0 auto;background:var(--bg);display:flex;flex-direction:column;position:relative;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+header{height:50px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--paper);border-bottom:1px solid var(--line);z-index:900}
+.logo{font-weight:800;font-size:20px;letter-spacing:.02em}
+.logo b{color:var(--accent)}
+.badge-proto{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--sub);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.confi-chip{font-size:12px;font-weight:700;background:#fff4ef;color:var(--accent-d);border-radius:99px;padding:3px 10px}
+main{flex:1;position:relative;min-height:0}
+.view{position:absolute;inset:0;display:none;overflow:auto}
+.view.on{display:block}
+#view-map{overflow:hidden}
+#map{position:absolute;inset:0;isolation:isolate;background:#f1f3f6}
+nav{flex:none;display:flex;background:var(--paper);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:900}
+nav button{flex:1;border:0;background:none;padding:8px 0 7px;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:1px}
+nav button .i{font-size:20px;line-height:1.1;filter:grayscale(1);opacity:.7}
+nav button.on{color:var(--ink);font-weight:700}
+nav button.on .i{filter:none;opacity:1}
+
+/* map overlays */
+.fab{position:absolute;right:12px;z-index:600;border:0;background:var(--paper);box-shadow:0 2px 10px rgba(20,30,50,.22);border-radius:50%;width:44px;height:44px;font-size:20px}
+#btn-locate{bottom:16px}
+#btn-add{bottom:68px;background:var(--accent);color:#fff;font-weight:700;font-size:26px;line-height:1}
+.chip{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:600;background:rgba(27,36,54,.88);color:#fff;font-size:12px;padding:6px 14px;border-radius:99px;max-width:92%;text-align:center;display:none}
+.chip.on{display:block}
+.chip button{background:none;border:0;color:#ffd2c4;text-decoration:underline;padding:0 0 0 6px}
+.legend{position:absolute;left:10px;bottom:14px;z-index:600;background:rgba(255,255,255,.94);border-radius:10px;padding:6px 10px;font-size:11px;color:var(--sub);box-shadow:0 1px 6px rgba(20,30,50,.16)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
+
+/* pins */
+.pin{width:34px;height:34px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);background:var(--c);border:2.5px solid #fff;box-shadow:0 2px 8px rgba(20,30,50,.35);display:flex;align-items:center;justify-content:center}
+.pin span{transform:rotate(45deg);font-size:16px}
+.pin.pop{animation:pop .7s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{0%{transform:rotate(-45deg) scale(.2);filter:grayscale(1)}100%{transform:rotate(-45deg) scale(1)}}
+.gpin{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.9);border:2px dashed var(--gray)}
+.mepin{width:22px;height:22px;border-radius:50%;background:var(--me);border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,107,255,.22),0 2px 8px rgba(0,0,0,.3)}
+.leaflet-tooltip{font-family:inherit;font-size:12px;border-radius:8px;border:0;box-shadow:0 2px 8px rgba(0,0,0,.2);padding:3px 8px}
+
+/* sheet */
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:800;background:var(--paper);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(20,30,50,.22);max-height:78%;overflow:auto;transform:translateY(105%);transition:transform .28s ease;padding:6px 16px 22px}
+#sheet.on{transform:none}
+.grab{width:42px;height:4px;border-radius:9px;background:var(--line);margin:4px auto 10px}
+.sp-head{display:flex;gap:10px;align-items:flex-start}
+.sp-ico{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--c);flex:none}
+.sp-name{font-size:18px;font-weight:800;line-height:1.35}
+.sp-meta{font-size:12px;color:var(--sub)}
+.x{margin-left:auto;border:0;background:var(--bg);width:30px;height:30px;border-radius:50%;flex:none}
+.stats{display:flex;gap:6px;margin:12px 0}
+.stat{flex:1;background:var(--bg);border-radius:10px;padding:7px 4px;text-align:center;font-size:11px;color:var(--sub)}
+.stat b{display:block;font-size:17px;color:var(--ink)}
+.main-info{border:1.5px solid var(--ink);border-radius:12px;padding:10px 12px;background:#fffdf7;position:relative}
+.main-info .tag{position:absolute;top:-10px;left:12px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;padding:1px 10px;border-radius:99px}
+.empty{background:var(--bg);border-radius:12px;padding:14px;color:var(--sub);font-size:13px}
+.row{display:flex;gap:8px;margin:12px 0}
+.btn{flex:1;border:1.5px solid var(--ink);background:var(--paper);border-radius:12px;padding:10px 6px;font-weight:700;font-size:14px;box-shadow:0 2px 0 var(--ink)}
+.btn:active{transform:translateY(2px);box-shadow:none}
+.btn.pri{background:var(--accent);border-color:var(--accent-d);box-shadow:0 2px 0 var(--accent-d);color:#fff}
+.btn.sm{flex:none;padding:6px 12px;font-size:12px;box-shadow:0 1.5px 0 var(--ink)}
+.btn[disabled]{opacity:.45;box-shadow:none}
+.link{background:none;border:0;color:var(--sub);font-size:12px;text-decoration:underline;padding:4px 0}
+h3{font-size:13px;color:var(--sub);margin:16px 0 6px;letter-spacing:.04em}
+
+/* report card */
+.rp{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.sheet .rp,#sheet .rp{background:var(--bg);border-color:transparent}
+.rp-top{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
+.av{width:24px;height:24px;border-radius:50%;background:var(--c,#cbd3e1);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex:none}
+.rp-user{font-weight:700;color:var(--ink)}
+.cf{font-size:10px;background:#fff4ef;color:var(--accent-d);border-radius:99px;padding:0 7px;font-weight:700}
+.rp-body{margin:6px 0 4px;white-space:pre-wrap;word-break:break-word}
+.rp img{width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin:4px 0}
+.rp-foot{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.tg{background:#eaf0ff;color:#2a4fb8;border-radius:6px;padding:0 6px;font-size:11px;font-weight:700}
+.kime{margin-left:auto;color:var(--accent-d);font-weight:800}
+.tl-spot{font-weight:800;font-size:14px}
+.pad{padding:14px}
+.tl-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.tl-head b{font-size:17px}
+.tl-head span{font-size:12px;color:var(--sub)}
+
+/* modal */
+#modal{position:absolute;inset:0;z-index:1000;background:rgba(15,22,36,.5);display:none;align-items:flex-end;justify-content:center}
+#modal.on{display:flex}
+.mbox{background:var(--paper);width:100%;border-radius:18px 18px 0 0;padding:16px 16px 22px;max-height:92%;overflow:auto}
+.mbox h2{font-size:17px;margin:0 0 4px}
+.mbox p{margin:4px 0;color:var(--sub);font-size:13px}
+textarea,input[type=text],select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font:inherit;background:#fff;color:var(--ink)}
+textarea{min-height:96px;resize:vertical}
+textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips button{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:4px 12px;font-size:13px}
+.chips button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.warn{background:#fff4e5;border-radius:10px;padding:10px;font-size:13px;color:#8a4b00;margin:8px 0}
+.good{background:#e9f8f1;border-radius:10px;padding:10px;font-size:13px;color:#14704b;margin:8px 0}
+.ring{width:140px;height:140px;margin:10px auto;position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .t{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800}
+.big{font-size:42px;text-align:center;margin:6px 0}
+.pick{width:100%;text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;display:block}
+.pick:active{border-color:var(--accent)}
+.pick .go{display:block;margin-top:6px;text-align:right;color:var(--accent-d);font-weight:800}
+
+/* me */
+.hero{background:var(--ink);color:#fff;border-radius:16px;padding:16px;margin-bottom:12px}
+.hero .rank{font-size:12px;opacity:.75}
+.hero .nm{font-size:20px;font-weight:800}
+.hero .pt{font-size:34px;font-weight:800;color:#ffb199;line-height:1.1}
+.hero .pt small{font-size:12px;color:#fff;opacity:.75;margin-left:4px}
+.bar{height:8px;background:rgba(255,255,255,.18);border-radius:9px;margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:#ffb199}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.card h4{margin:0 0 6px;font-size:14px}
+.sim label{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:8px}
+.sim input[type=range]{width:100%;accent-color:var(--accent)}
+.sim table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+.sim td{padding:5px 0;border-top:1px solid var(--line)}
+.sim td:last-child{text-align:right;font-weight:700}
+.note{font-size:11px;color:var(--sub)}
+#toast{position:absolute;left:50%;bottom:78px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:9px 16px;border-radius:12px;font-size:13px;z-index:1100;opacity:0;pointer-events:none;transition:.25s;max-width:90%;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">ルポ<b>る</b></div>
+    <span class="badge-proto">PROTOTYPE</span>
+    <span class="confi-chip" id="hd-confi">コンフィ 0</span>
+  </header>
+  <main>
+    <section class="view on" id="view-map">
+      <div id="map"></div>
+      <div class="chip" id="chip"></div>
+      <div class="legend"><i style="background:#fff;border:2px dashed #aeb6c4"></i>ルポ待ち　<i style="background:var(--accent)"></i>ルポ済み</div>
+      <button class="fab" id="btn-add" title="新しいスポットを作る">＋</button>
+      <button class="fab" id="btn-locate" title="現在地">◎</button>
+    </section>
+    <section class="view" id="view-tl"><div class="pad" id="tl"></div></section>
+    <section class="view" id="view-me"><div class="pad" id="me"></div></section>
+    <div id="sheet"></div>
+    <div id="modal"></div>
+    <div id="toast"></div>
+  </main>
+  <nav>
+    <button data-v="map" class="on"><span class="i">🗺️</span>マップ</button>
+    <button data-v="tl"><span class="i">📝</span>タイムライン</button>
+    <button data-v="me"><span class="i">👤</span>マイページ</button>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ===== 設定 ===== */
+const HOME = {lat:35.7442, lng:139.7112};        // 北池袋あたり
+const ARRIVE_M = 100;                            // 到着とみなす距離(m)
+const FIRST_REPORT_M = 150;                      // 最初のルポは現地にいる必要がある距離(m)
+const DWELL_SEC = 8;                             // 滞在秒数（本番は60秒）
+const KIME_CONFI = 10;                           // 「決めた！」1回で上がるコンフィ
+const KEY = 'rupo-proto-v1';
+
+const CATS = {
+  food:  {e:'🍽️', l:'ごはん',     c:'#ff8a5b'},
+  cafe:  {e:'☕',  l:'カフェ',     c:'#c08a5a'},
+  bar:   {e:'🍺',  l:'お酒',       c:'#e0a82e'},
+  sweets:{e:'🍰',  l:'パン・スイーツ', c:'#f27da5'},
+  shop:  {e:'🛍️', l:'お買い物',   c:'#6c8cff'},
+  books: {e:'📚',  l:'本',         c:'#7a6cd6'},
+  park:  {e:'🌳',  l:'公園',       c:'#4cb782'},
+  fun:   {e:'🎬',  l:'遊ぶ・見る', c:'#3fb6c9'},
+  relax: {e:'♨️',  l:'癒し',       c:'#e07a7a'},
+  other: {e:'📍',  l:'その他',     c:'#8d97aa'}
+};
+const TAGS = ['おすすめ','雰囲気','混み具合','価格','注意','穴場'];
+const AVC = ['#ff8a5b','#4cb782','#6c8cff','#e0a82e','#f27da5','#3fb6c9','#7a6cd6'];
+
+/* ===== ユーティリティ ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rid = p => p + Math.random().toString(36).slice(2,9);
+const ym = () => { const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1); };
+function dist(a,b){
+  const R=6371000, r=Math.PI/180;
+  const dLat=(b.lat-a.lat)*r, dLng=(b.lng-a.lng)*r;
+  const h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+const fmtD = m => m<1000 ? Math.round(m/10)*10+'m' : (m/1000).toFixed(1)+'km';
+function ago(t){
+  const s=(Date.now()-t)/1000;
+  if(s<60) return 'たった今';
+  if(s<3600) return Math.floor(s/60)+'分前';
+  if(s<86400) return Math.floor(s/3600)+'時間前';
+  return Math.floor(s/86400)+'日前';
+}
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'),2600);
+}
+function avColor(name){ let h=0; for(const ch of name) h=(h*31+ch.charCodeAt(0))>>>0; return AVC[h%AVC.length]; }
+
+/* ===== データ ===== */
+let S;
+function seed(){
+  const now=Date.now(), H=3600e3, D=24*H;
+  const sp=(id,name,lat,lng,cat,creator,views,checkins,reports)=>({id,name,lat,lng,cat,creator,demo:true,views,checkins,reports});
+  const rp=(user,text,tag,ago,likes)=>({id:rid('r'),user,text,tag,t:now-ago,likes,photo:null});
+  return {
+    me:'あなた',
+    users:{'あなた':{confi:0},'ミナト':{confi:320},'ハナ':{confi:180},'ソウタ':{confi:90},'リン':{confi:40},'ケン':{confi:15}},
+    pos:{lat:HOME.lat,lng:HOME.lng},
+    spots:{
+      d1:sp('d1','（デモ）珈琲 北池袋店',35.7449,139.7121,'cafe','ミナト',212,48,[
+        rp('ミナト','平日の午前は空いていて、窓際の席で作業しやすい。ブレンドのおかわりが100円。','おすすめ',2*D,14),
+        rp('ハナ','夕方以降は学生で満席になりがち。','混み具合',5*H,3)]),
+      d2:sp('d2','（デモ）食堂 ひだまり',35.7435,139.7105,'food','ハナ',160,31,[
+        rp('ハナ','日替わり定食が800円。ごはんの大盛りが無料で、量をしっかり食べたい日に。','おすすめ',D,9),
+        rp('ソウタ','現金のみ。昼は12時すぎが一番混む。','注意',3*D,5)]),
+      d3:sp('d3','（デモ）書店 しおり',35.7440,139.7132,'books','ソウタ',74,12,[
+        rp('ソウタ','小さいけれど文庫の棚がていねい。店主のおすすめコーナーが当たり。','雰囲気',6*D,4)]),
+      d4:sp('d4','（デモ）ひろっぱ公園',35.7455,139.7098,'park','リン',98,22,[
+        rp('リン','夕方の散歩にちょうどいい。ベンチが多くて、犬の散歩の人が多い。','雰囲気',2*H,2)]),
+      d5:sp('d5','（デモ）麺や 北',35.7428,139.7120,'food','ミナト',305,66,[
+        rp('ミナト','塩ラーメンがおすすめ。夜は行列ができるので、開店直後が狙い目。','穴場',D,18),
+        rp('ケン','替え玉は2回まで無料。','おすすめ',9*H,1)]),
+      d6:sp('d6','（デモ）パン工房 こむぎ',35.7462,139.7115,'sweets','リン',57,9,[
+        rp('リン','朝8時に焼きたてが出る。クリームパンは昼前に売り切れることが多い。','穴場',4*D,3)])
+    },
+    views:{}, arrivals:{}, kimeta:{}
+  };
+}
+function load(){ try{ const j=localStorage.getItem(KEY); if(j) return JSON.parse(j); }catch(e){} return null; }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast('保存の容量がいっぱいです（写真を減らしてください）'); } }
+S = load() || seed();
+
+const cands = new Map();   // OSMから取り込んだ「ルポ待ち」候補
+const spotData = id => S.spots[id] || cands.get(id);
+const isReal = id => !!S.spots[id];
+const conf = u => (S.users[u]||{confi:0}).confi;
+function score(r){ return (r.likes+1)*(1+conf(r.user)/100); }
+function best(sp){ return sp.reports.length ? sp.reports.slice().sort((a,b)=>score(b)-score(a))[0] : null; }
+function rankOf(c){ return c<50?'見習いルポルター':c<200?'ルポルター':c<500?'ベテランルポルター':'街のガイド'; }
+
+/* ===== 地図 ===== */
+const map = L.map('map',{zoomControl:false, attributionControl:true}).setView([S.pos.lat,S.pos.lng],16);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+  maxZoom:19, subdomains:'abcd',
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+}).addTo(map);
+const gLayer = L.layerGroup().addTo(map);
+const cLayer = L.layerGroup().addTo(map);
+const markers = new Map();
+let popId = null;
+
+const meMarker = L.marker([S.pos.lat,S.pos.lng],{
+  icon:L.divIcon({className:'',html:'<div class="mepin"></div>',iconSize:[22,22],iconAnchor:[11,11]}),
+  draggable:true, zIndexOffset:1000
+}).addTo(map);
+meMarker.bindTooltip('あなた（ドラッグで移動できます）',{direction:'top',offset:[0,-10]});
+meMarker.on('dragend',()=>{ const p=meMarker.getLatLng(); setPos(p.lat,p.lng,false); });
+
+function setPos(lat,lng,move){
+  S.pos={lat,lng}; save();
+  if(move!==false) meMarker.setLatLng([lat,lng]);
+  renderTL(); refreshSheet();
+}
+
+function iconFor(sp,real,pop){
+  const c=CATS[sp.cat]||CATS.other;
+  if(!real) return L.divIcon({className:'',html:'<div class="gpin"></div>',iconSize:[14,14],iconAnchor:[7,7]});
+  return L.divIcon({className:'',html:`<div class="pin${pop?' pop':''}" style="--c:${c.c}"><span>${c.e}</span></div>`,iconSize:[34,34],iconAnchor:[6,34]});
+}
+function syncMarkers(){
+  const all = new Map();
+  cands.forEach((v,k)=>all.set(k,v));
+  Object.keys(S.spots).forEach(k=>all.set(k,S.spots[k]));
+  all.forEach((sp,id)=>{
+    const real=isReal(id), key=(real?'r':'g')+sp.cat;
+    let m=markers.get(id);
+    if(m && m.key!==key){ (m.real?cLayer:gLayer).removeLayer(m.m); markers.delete(id); m=null; }
+    if(!m){
+      const mk=L.marker([sp.lat,sp.lng],{icon:iconFor(sp,real,popId===id)});
+      mk.bindTooltip(esc(sp.name),{direction:'top',offset:[0,real?-30:-6]});
+      mk.on('click',()=>openSheet(id));
+      (real?cLayer:gLayer).addLayer(mk);
+      markers.set(id,{m:mk,key,real});
+    }
+  });
+  popId=null;
+}
+
+/* OSM(Overpass)からお店の候補を取得 */
+const ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+let fetched=[], loading=false, failed=false;
+function catOfTags(t){
+  const a=t.amenity, s=t.shop, l=t.leisure, to=t.tourism;
+  if(a==='cafe') return 'cafe';
+  if(['restaurant','fast_food','food_court'].includes(a)) return 'food';
+  if(['bar','pub','izakaya'].includes(a)) return 'bar';
+  if(['ice_cream'].includes(a)||['bakery','confectionery'].includes(s)) return 'sweets';
+  if(a==='library'||s==='books') return 'books';
+  if(l==='park'||l==='garden') return 'park';
+  if(['cinema','karaoke_box','theatre'].includes(a)||l==='amusement_arcade'||['museum','gallery','attraction'].includes(to)) return 'fun';
+  if(a==='public_bath'||l==='fitness_centre') return 'relax';
+  if(s) return 'shop';
+  return 'other';
+}
+function inside(b,f){ return b.s>=f.s&&b.n<=f.n&&b.w>=f.w&&b.e<=f.e; }
+async function loadSpots(force){
+  if(map.getZoom()<16||loading) return;
+  const bb=map.getBounds(), padLat=(bb.getNorth()-bb.getSouth())*.25, padLng=(bb.getEast()-bb.getWest())*.25;
+  const b={s:bb.getSouth()-padLat,n:bb.getNorth()+padLat,w:bb.getWest()-padLng,e:bb.getEast()+padLng};
+  if(!force && fetched.some(f=>inside({s:bb.getSouth(),n:bb.getNorth(),w:bb.getWest(),e:bb.getEast()},f))) return;
+  loading=true; setChip('お店の位置を読み込み中…');
+  const bx=`(${b.s},${b.w},${b.n},${b.e})`;
+  const q=`[out:json][timeout:25];(`+
+    `nwr["name"]["amenity"~"^(restaurant|cafe|fast_food|bar|pub|izakaya|food_court|ice_cream|cinema|library|public_bath|karaoke_box|theatre)$"]${bx};`+
+    `nwr["name"]["shop"~"^(bakery|books|convenience|supermarket|clothes|variety_store|confectionery|alcohol|department_store|mall|electronics|cosmetics|drugstore)$"]${bx};`+
+    `nwr["name"]["leisure"~"^(park|garden|fitness_centre|amusement_arcade)$"]${bx};`+
+    `nwr["name"]["tourism"~"^(museum|gallery|attraction)$"]${bx};`+
+    `);out center 500;`;
+  let data=null;
+  for(const ep of ENDPOINTS){
+    try{
+      const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+      if(!r.ok) throw 0; data=await r.json(); break;
+    }catch(e){}
+  }
+  loading=false;
+  if(!data){ failed=true; setChip('お店の位置を取得できませんでした（デモのスポットのみ表示）<button id="retry">再読み込み</button>'); const rb=$('#retry'); if(rb) rb.onclick=()=>loadSpots(true); return; }
+  failed=false; fetched.push(b);
+  let n=0;
+  for(const el of data.elements){
+    const lat=el.lat??(el.center&&el.center.lat), lng=el.lon??(el.center&&el.center.lon);
+    if(lat==null||!el.tags||!el.tags.name) continue;
+    const id='osm:'+el.type+'/'+el.id;
+    if(cands.has(id)||S.spots[id]) continue;
+    cands.set(id,{id,name:el.tags.name,lat,lng,cat:catOfTags(el.tags),osm:true});
+    n++;
+  }
+  syncMarkers(); setChip(null);
+  if(!n && !cands.size) setChip('このあたりにはお店のデータがありません');
+}
+function setChip(html){
+  const c=$('#chip');
+  if(!html){ c.classList.remove('on'); return; }
+  c.innerHTML=html; c.classList.add('on');
+}
+function onMove(){
+  const z=map.getZoom();
+  if(z<16){
+    if(map.hasLayer(gLayer)) map.removeLayer(gLayer);
+    setChip('もっと拡大すると、ルポ待ちの印が見えます');
+  }else{
+    if(!map.hasLayer(gLayer)) map.addLayer(gLayer);
+    if($('#chip').textContent.startsWith('もっと拡大')) setChip(null);
+    loadSpots();
+  }
+}
+map.on('moveend',onMove);
+
+/* ===== 画面切替 ===== */
+function showView(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='view-'+v));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  if(v==='map') setTimeout(()=>map.invalidateSize(),50);
+  if(v==='tl') renderTL();
+  if(v==='me') renderMe();
+  if(v!=='map') closeSheet();
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showView(b.dataset.v));
+
+/* ===== スポット詳細シート ===== */
+let curId=null;
+function reportCard(r,opts){
+  opts=opts||{};
+  const cf=conf(r.user);
+  return `<div class="rp">
+    <div class="rp-top"><span class="av" style="--c:${avColor(r.user)}">${esc(r.user[0])}</span><span class="rp-user">${esc(r.user)}</span><span class="cf">コンフィ ${cf}</span><span style="margin-left:auto">${ago(r.t)}</span></div>
+    ${opts.spot?`<div class="tl-spot" style="margin-top:6px">${esc(opts.spot)}${opts.d!=null?` <span class="sp-meta">${fmtD(opts.d)}</span>`:''}</div>`:''}
+    <div class="rp-body">${esc(r.text)}</div>
+    ${r.photo?`<img src="${r.photo}" alt="">`:''}
+    <div class="rp-foot"><span class="tg">${esc(r.tag)}</span><span class="kime">${r.likes>0?`🎯 決めた！ ${r.likes}`:''}</span></div>
+  </div>`;
+}
+function openSheet(id){
+  curId=id;
+  S.views[id]=(S.views[id]||0)+1; save();
+  map.panTo([spotData(id).lat, spotData(id).lng],{animate:true});
+  refreshSheet(true);
+}
+function refreshSheet(){
+  const sh=$('#sheet');
+  if(!curId){ sh.classList.remove('on'); return; }
+  const sp=spotData(curId); if(!sp){ closeSheet(); return; }
+  const real=isReal(curId), c=CATS[sp.cat]||CATS.other, d=dist(S.pos,sp);
+  const views=(sp.views||0)+(S.views[curId]||0), checkins=sp.checkins||0, rpn=real?sp.reports.length:0;
+  const mi=real?best(sp):null;
+  let h=`<div class="grab"></div>
+  <div class="sp-head"><div class="sp-ico" style="--c:${c.c}33">${c.e}</div>
+    <div><div class="sp-name">${esc(sp.name)}</div>
+    <div class="sp-meta">${c.l} ・ あなたから ${fmtD(d)}${real?` ・ 作成者 ${esc(sp.creator)}`:''}</div></div>
+    <button class="x" id="sh-x">✕</button></div>
+  <div class="stats"><div class="stat"><b>${views}</b>閲覧</div><div class="stat"><b>${checkins}</b>到着</div><div class="stat"><b>${rpn}</b>ルポ</div></div>`;
+  if(!real){
+    h+=`<div class="empty">🗺️ このスポットにはまだ誰もルポしていません。<br>最初にルポを書いた人が<b>スポットの作成者</b>になります（収益の5％）。</div>
+    <div class="row"><button class="btn pri" id="sh-rp">✍️ 最初のルポを書く</button><button class="btn" id="sh-nav">🧭 経路案内</button></div>`;
+  }else{
+    h+=`<div class="main-info"><span class="tag">✨ メイン情報</span>${mi?reportCard(mi).replace('class="rp"','class="rp" style="border:0;background:none;padding:6px 0 0;margin:0"'):'<div class="empty">まだルポがありません</div>'}</div>
+    <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>`;
+    const rest=sp.reports.slice().sort((a,b)=>b.t-a.t);
+    h+=`<h3>みんなのルポ（${rest.length}）</h3>`+rest.map(r=>reportCard(r)).join('');
+  }
+  h+=`<button class="link" id="sh-tp">🧪 デモ：自分をこの場所に移動する</button>`;
+  sh.innerHTML=h; sh.classList.add('on');
+  $('#sh-x').onclick=closeSheet;
+  const b=(i,f)=>{const e=$(i); if(e) e.onclick=f;};
+  b('#sh-rp',()=>openReport(curId));
+  b('#sh-arr',()=>startArrive(curId));
+  b('#sh-nav',()=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${sp.lat},${sp.lng}&travelmode=walking`,'_blank'));
+  b('#sh-tp',()=>{ setPos(sp.lat+0.00005,sp.lng+0.00005); toast('あなたをこのスポットに移動しました'); });
+}
+function closeSheet(){ curId=null; $('#sheet').classList.remove('on'); }
+map.on('click',closeSheet);
+
+/* ===== モーダル ===== */
+function modal(html){ const m=$('#modal'); m.innerHTML='<div class="mbox">'+html+'</div>'; m.classList.add('on'); }
+function closeModal(){ $('#modal').classList.remove('on'); $('#modal').innerHTML=''; clearInterval(closeModal._t); }
+$('#modal').addEventListener('click',e=>{ if(e.target.id==='modal' && !closeModal.lock) closeModal(); });
+
+/* ルポる */
+function resizePhoto(file){
+  return new Promise(res=>{
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const k=Math.min(1,640/Math.max(img.width,img.height)), cv=document.createElement('canvas');
+        cv.width=Math.round(img.width*k); cv.height=Math.round(img.height*k);
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        res(cv.toDataURL('image/jpeg',.72));
+      };
+      img.onerror=()=>res(null); img.src=fr.result;
+    };
+    fr.onerror=()=>res(null); fr.readAsDataURL(file);
+  });
+}
+function openReport(id){
+  const isNew = id==null;
+  const sp = isNew ? null : spotData(id);
+  const first = isNew || !isReal(id);
+  const far = first && !isNew && dist(S.pos,sp)>FIRST_REPORT_M;
+  let tag=TAGS[0], photo=null, cat=isNew?'food':sp.cat;
+  modal(`<h2>${isNew?'新しいスポットを作ってルポる':esc(sp.name)+' をルポる'}</h2>
+    ${first?`<div class="${far?'warn':'good'}">${far
+      ? `📍 最初のルポは<b>現地にいる人だけ</b>が書けます。いまは ${fmtD(dist(S.pos,sp))} 離れています。<br><button class="link" id="rp-tp">🧪 デモ：自分をこの場所に移動する</button>`
+      : '🎉 あなたが最初のルポルターです。書くとこのスポットの<b>作成者</b>になります。'}</div>`:''}
+    ${isNew?`<p>スポット名</p><input type="text" id="rp-name" maxlength="40" placeholder="例：〇〇食堂">
+      <p>ジャンル</p><select id="rp-cat">${Object.keys(CATS).map(k=>`<option value="${k}">${CATS[k].e} ${CATS[k].l}</option>`).join('')}</select>
+      <p>場所：いまの現在地に作ります</p>`:''}
+    <p>ルポの内容（行ってみて分かったこと）</p>
+    <textarea id="rp-text" maxlength="300" placeholder="例：平日の昼は空いていて、日替わりが安い。現金のみ。"></textarea>
+    <div class="chips" id="rp-tags">${TAGS.map((t,i)=>`<button data-t="${t}" class="${i?'':'on'}">${t}</button>`).join('')}</div>
+    <input type="file" accept="image/*" id="rp-photo" style="display:none">
+    <div class="row" style="margin-bottom:0"><button class="btn" id="rp-ph">📷 写真</button><button class="btn pri" id="rp-ok" ${far?'disabled':''}>ルポを投稿</button></div>
+    <div class="note" id="rp-phn" style="margin-top:6px"></div>
+    <button class="link" id="rp-x" style="margin-top:6px">やめる</button>`);
+  $('#rp-x').onclick=closeModal;
+  const tp=$('#rp-tp'); if(tp) tp.onclick=()=>{ setPos(sp.lat+0.00005,sp.lng+0.00005); openReport(id); };
+  $('#rp-tags').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; tag=b.dataset.t; [...$('#rp-tags').children].forEach(x=>x.classList.toggle('on',x===b)); };
+  $('#rp-ph').onclick=()=>$('#rp-photo').click();
+  $('#rp-photo').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; photo=await resizePhoto(f); $('#rp-phn').textContent=photo?'📷 写真を追加しました':'写真を読み込めませんでした'; };
+  $('#rp-ok').onclick=()=>{
+    const text=$('#rp-text').value.trim();
+    if(text.length<5){ toast('もう少し詳しく書いてみましょう（5文字以上）'); return; }
+    let spotId=id, created=false;
+    if(isNew){
+      const nm=$('#rp-name').value.trim();
+      if(!nm){ toast('スポット名を入れてください'); return; }
+      cat=$('#rp-cat').value;
+      spotId=rid('u'); created=true;
+      S.spots[spotId]={id:spotId,name:nm,lat:S.pos.lat,lng:S.pos.lng,cat,creator:S.me,views:0,checkins:0,reports:[]};
+    }else if(!isReal(id)){
+      const c=cands.get(id);
+      S.spots[id]={id,name:c.name,lat:c.lat,lng:c.lng,cat:c.cat,creator:S.me,views:0,checkins:0,reports:[],osm:true};
+      created=true; popId=id;
+    }
+    S.spots[spotId].reports.push({id:rid('r'),user:S.me,text,tag,t:Date.now(),likes:0,photo});
+    save(); closeModal(); popId=spotId; syncMarkers(); renderTL(); renderHead();
+    if(created){ toast('🎉 色がつきました！あなたがこのスポットの作成者です'); const s=S.spots[spotId]; map.panTo([s.lat,s.lng]); curId=spotId; refreshSheet(); }
+    else { toast('ルポを投稿しました'); refreshSheet(); }
+  };
+}
+$('#btn-add').onclick=()=>openReport(null);
+$('#btn-locate').onclick=()=>{
+  if(!navigator.geolocation){ toast('この端末では現在地を取得できません'); return; }
+  toast('現在地を取得中…');
+  navigator.geolocation.getCurrentPosition(p=>{ setPos(p.coords.latitude,p.coords.longitude); map.setView([p.coords.latitude,p.coords.longitude],17); },
+    ()=>{ map.setView([S.pos.lat,S.pos.lng],17); toast('取得できないため、デモの現在地に移動しました'); },{enableHighAccuracy:true,timeout:8000});
+};
+
+/* 到着 → 滞在 → 決めた！ */
+function startArrive(id){
+  const sp=spotData(id), d=dist(S.pos,sp);
+  if(d>ARRIVE_M){
+    modal(`<h2>まだ到着していません</h2><p>${esc(sp.name)} から <b>${ARRIVE_M}m以内</b>で「到着」できます。いまは ${fmtD(d)} 離れています。</p>
+      <div class="row"><button class="btn" id="m-nav">🧭 経路案内</button><button class="btn" id="m-tp">🧪 デモ：移動する</button></div><button class="link" id="m-x">閉じる</button>`);
+    $('#m-x').onclick=closeModal;
+    $('#m-nav').onclick=()=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${sp.lat},${sp.lng}&travelmode=walking`,'_blank');
+    $('#m-tp').onclick=()=>{ setPos(sp.lat+0.00005,sp.lng+0.00005); closeModal(); toast('移動しました。もう一度「到着した」を押してください'); };
+    return;
+  }
+  const k=id+'|'+ym();
+  if(S.arrivals[k]){
+    modal(`<h2>今月はすでに到着済みです</h2><p>同じスポットの到着は<b>月に1回</b>までカウントされます。</p><button class="btn" id="m-x" style="width:100%">閉じる</button>`);
+    $('#m-x').onclick=closeModal; return;
+  }
+  closeModal.lock=true;
+  const R=60, C=2*Math.PI*R; let left=DWELL_SEC;
+  modal(`<h2>滞在を確認しています</h2><p>${esc(sp.name)} に ${DWELL_SEC}秒 いると到着になります<br><span class="note">（本番は1分。自宅付近の判定も入ります）</span></p>
+    <div class="ring"><svg width="140" height="140"><circle cx="70" cy="70" r="${R}" fill="none" stroke="#e3e7ee" stroke-width="10"/><circle id="rg" cx="70" cy="70" r="${R}" fill="none" stroke="#ff6a3d" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C}" style="transition:stroke-dashoffset 1s linear"/></svg><div class="t" id="rt">${left}</div></div>
+    <button class="link" id="m-x">キャンセル</button>`);
+  $('#m-x').onclick=()=>{ closeModal.lock=false; closeModal(); };
+  setTimeout(()=>{ const g=$('#rg'); if(g) g.style.strokeDashoffset=C*(left-1)/DWELL_SEC; },30);
+  closeModal._t=setInterval(()=>{
+    left--; const t=$('#rt'), g=$('#rg');
+    if(t) t.textContent=Math.max(left,0); if(g) g.style.strokeDashoffset=C*Math.max(left-1,0)/DWELL_SEC;
+    if(left<=0){
+      clearInterval(closeModal._t); closeModal.lock=false;
+      S.arrivals[k]=1; sp.checkins=(sp.checkins||0)+1; save(); showKime(id); renderHead(); refreshSheet();
+    }
+  },1000);
+}
+function showKime(id){
+  const sp=spotData(id);
+  const list=sp.reports.filter(r=>r.user!==S.me);
+  if(!list.length){
+    modal(`<div class="big">🎉</div><h2 style="text-align:center">到着しました！</h2><p style="text-align:center">今月のチェックインをカウントしました。<br>このスポットには他の人のルポがまだありません。</p><button class="btn" id="m-x" style="width:100%;margin-top:10px">閉じる</button>`);
+    $('#m-x').onclick=closeModal; return;
+  }
+  modal(`<div class="big">🎉</div><h2 style="text-align:center">到着しました！</h2>
+    <p style="text-align:center;margin-bottom:10px">ここに来ると<b>決めた</b>きっかけになったルポに、<b>「決めた！」</b>を1つ贈ろう。</p>
+    ${list.map(r=>`<button class="pick" data-r="${r.id}"><span class="rp-top"><span class="av" style="--c:${avColor(r.user)}">${esc(r.user[0])}</span><span class="rp-user">${esc(r.user)}</span><span class="cf">コンフィ ${conf(r.user)}</span></span><span style="display:block;margin-top:4px">${esc(r.text)}</span><span class="go">🎯 決めた！</span></button>`).join('')}
+    <button class="link" id="m-x">きっかけは別にある・あとで</button>`);
+  $('#m-x').onclick=closeModal;
+  $('#modal').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{
+    const r=sp.reports.find(x=>x.id===b.dataset.r); if(!r) return;
+    r.likes++; (S.users[r.user]=S.users[r.user]||{confi:0}).confi+=KIME_CONFI; save();
+    closeModal(); toast(`🎯 決めた！を贈りました。${r.user}さんのコンフィ +${KIME_CONFI}`); refreshSheet(); renderHead();
+  });
+}
+
+/* ===== タイムライン ===== */
+function renderTL(){
+  const el=$('#tl'); if(!el) return;
+  const items=[]; Object.values(S.spots).forEach(sp=>sp.reports.forEach(r=>items.push({r,sp,d:dist(S.pos,sp)})));
+  let rad=500; const steps=[500,1000,2000,5000,10000,30000];
+  for(const s of steps){ rad=s; if(items.filter(i=>i.d<=s).length>=5) break; }
+  const list=items.filter(i=>i.d<=rad).sort((a,b)=>b.r.t-a.r.t);
+  el.innerHTML=`<div class="tl-head"><b>近くのルポ</b><span>半径 ${rad>=1000?rad/1000+'km':rad+'m'} 以内（${list.length}件）</span></div>`+
+    (list.length?list.map(i=>`<div data-s="${i.sp.id}" style="cursor:pointer">${reportCard(i.r,{spot:i.sp.name,d:i.d})}</div>`).join(''):'<div class="empty">近くにルポがありません。最初のルポルターになろう！</div>')+
+    `<p class="note">表示件数が少ないときは、半径が自動で広がります。</p>`;
+  el.querySelectorAll('[data-s]').forEach(e=>e.onclick=()=>{ showView('map'); const sp=S.spots[e.dataset.s]; map.setView([sp.lat,sp.lng],17); openSheet(sp.id); });
+}
+
+/* ===== マイページ ===== */
+function renderHead(){ $('#hd-confi').textContent='コンフィ '+conf(S.me); }
+function renderMe(){
+  const el=$('#me'), c=conf(S.me);
+  const mine=[]; let created=0, got=0, arr=Object.keys(S.arrivals).length;
+  Object.values(S.spots).forEach(sp=>{ if(sp.creator===S.me) created++; sp.reports.forEach(r=>{ if(r.user===S.me){ mine.push({r,sp}); got+=r.likes; } }); });
+  const nxt=c<50?50:c<200?200:c<500?500:null, pct=nxt?Math.min(100,c/nxt*100):100;
+  el.innerHTML=`<div class="hero"><div class="rank">${rankOf(c)}</div><div class="nm">${esc(S.me)}</div>
+    <div class="pt">${c}<small>コンフィ</small></div><div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="rank" style="margin-top:6px">${nxt?`あと ${nxt-c} で次のランク`:'最高ランクです'} ／ 収益化プログラムは ${c>=300?'<b>対象です</b>':'コンフィ300から（仮）'}</div></div>
+    <div class="grid4"><div class="stat"><b>${created}</b>作ったスポット</div><div class="stat"><b>${mine.length}</b>ルポ</div><div class="stat"><b>${got}</b>決めた！</div><div class="stat"><b>${arr}</b>到着</div></div>
+    <div class="card"><h4>あなたのルポ</h4>${mine.length?mine.sort((a,b)=>b.r.t-a.r.t).map(m=>`<div>${reportCard(m.r,{spot:m.sp.name})}<button class="link" data-demo="${m.r.id}|${m.sp.id}">🧪 デモ：誰かが「決めた！」を押す</button></div>`).join(''):'<div class="empty">まだルポがありません。地図のグレーの印をタップして、最初のルポを書いてみましょう。</div>'}</div>
+    <div class="card sim"><h4>💰 収益分配シミュレーター（将来構想）</h4>
+      <div class="note">アプリ全体の広告収益を、チェックインに応じて各スポットに割り振り、貢献者に分配します。</div>
+      <label>アプリ全体の広告収益<b id="v1"></b></label><input type="range" id="s1" min="100" max="10000" step="100" value="1000">
+      <label>アプリ全体の総チェックイン数<b id="v2"></b></label><input type="range" id="s2" min="100" max="10000" step="100" value="1000">
+      <label>このスポットのチェックイン数<b id="v3"></b></label><input type="range" id="s3" min="10" max="10000" step="10" value="1000">
+      <label>オーナー契約あり<input type="checkbox" id="s4" checked></label>
+      <table id="sim-t"></table>
+      <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定</div></div>
+    <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
+  el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
+    const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
+    r.likes++; S.users[S.me].confi+=KIME_CONFI; save(); renderHead(); renderMe(); toast('🎯 誰かが決めた！を押しました。コンフィ +'+KIME_CONFI);
+  });
+  $('#reset').onclick=()=>{ if(confirm('デモデータを最初の状態に戻しますか？')){ try{localStorage.removeItem(KEY);}catch(e){} location.reload(); } };
+  const f=n=>n.toLocaleString('ja-JP');
+  const sim=()=>{
+    const rev=+$('#s1').value*1e4, tot=+$('#s2').value*1e4, chk=+$('#s3').value, own=$('#s4').checked;
+    $('#v1').textContent=f(rev/1e4)+'万円'; $('#v2').textContent=f(tot/1e4)+'万'; $('#v3').textContent=f(chk);
+    const pool=Math.round(rev*chk/tot), ops=pool*.5, cr=pool*.05, ow=own?pool*.05:0, rep=pool-ops-cr-ow;
+    $('#sim-t').innerHTML=`<tr><td>このスポットの収益</td><td>${f(pool)}円</td></tr><tr><td>運営 50%</td><td>${f(ops)}円</td></tr><tr><td>スポット作成者 5%</td><td>${f(cr)}円</td></tr><tr><td>オーナー ${own?'5%':'（未契約）'}</td><td>${f(ow)}円</td></tr><tr><td>ルポルターで山分け ${own?'40%':'45%'}</td><td>${f(rep)}円</td></tr><tr><td class="note">例：決めた！ 6:4 のふたり</td><td class="note">${f(rep*.6)}円 ／ ${f(rep*.4)}円</td></tr>`;
+  };
+  ['s1','s2','s3','s4'].forEach(i=>$('#'+i).oninput=sim); sim();
+}
+
+/* ===== 起動 ===== */
+renderHead(); syncMarkers(); renderTL(); onMove();
+setTimeout(()=>map.invalidateSize(),100);
+})();
+</script>
+</body>
+</html>
