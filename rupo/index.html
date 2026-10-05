@@ -428,7 +428,10 @@ function reportCard(r,opts){
 }
 function openSheet(id){
   curId=id;
-  S.views[id]=(S.views[id]||0)+1; save();
+  // 閲覧は、同じスポットを1人1日1回だけ数える
+  S.viewDay=S.viewDay||{};
+  const today=new Date().toDateString();
+  if(S.viewDay[id]!==today){ S.viewDay[id]=today; S.views[id]=(S.views[id]||0)+1; save(); }
   map.panTo([spotData(id).lat, spotData(id).lng],{animate:true});
   refreshSheet(true);
 }
