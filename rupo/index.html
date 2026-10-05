@@ -60,6 +60,15 @@ nav button.on .i{filter:none;opacity:1}
 #placebar p{margin:0 0 8px;font-size:13px}
 .sw{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .sw input{width:22px;height:22px;accent-color:var(--accent)}
+.pos{border:1.5px dashed var(--accent);border-radius:12px;padding:10px 12px;background:#fff8f5;margin:12px 0}
+.pos b.t{font-size:14px}
+.pos .bars{display:flex;height:10px;border-radius:9px;overflow:hidden;background:var(--line);margin:8px 0 4px}
+.pos .bars i{display:block;height:100%}
+.pos .bars .a{background:#8d97aa}
+.pos .bars .b{background:var(--accent)}
+.pos .nums{display:flex;justify-content:space-between;font-size:12px;color:var(--sub)}
+.pos .row{margin:8px 0 0;flex-wrap:wrap}
+.pos-note{background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--sub);margin:10px 0}
 /* sheet */
 #sheet{position:absolute;left:0;right:0;bottom:0;z-index:800;background:var(--paper);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(20,30,50,.22);max-height:78%;overflow:auto;transform:translateY(105%);transition:transform .28s ease;padding:6px 16px 22px}
 #sheet.on{transform:none}
@@ -187,6 +196,12 @@ const FIRST_REPORT_M = 150;                      // 最初のルポを書ける�
 const VISIT_DAYS = 7;                            // 訪れてから何日以内の場所に作れるか
 const DWELL_SEC = 8;                             // 滞在秒数（本番は60秒）
 const KIME_CONFI = 10;                           // 「決めた！」1回で上がるコンフィ
+const DIVERGE_M = 30;                            // この距離(m)以上ずれた位置の提案は、みんなで確認する
+const NEED_VOTES = 5;                            // 決着に必要な最低票数
+const ADOPT_RATIO = 2/3;                         // 採用に必要な票の割合
+const TIE_VOTES = 10;                            // この票数でも決まらないときは、元の位置のまま
+const COOLDOWN_DAYS = 30;                        // 決着後、再提案できない日数
+const POS_CONFI = 20;                            // 提案が採用されたときに上がるコンフィ
 const KEY = 'rupo-proto-v1';
 
 const CATS = {
@@ -454,7 +469,7 @@ function refreshSheet(){
   }else{
     h+=`<div class="main-info"><span class="tag">✨ メイン情報</span>${mi?reportCard(mi).replace('class="rp"','class="rp" style="border:0;background:none;padding:6px 0 0;margin:0"'):'<div class="empty">まだルポがありません</div>'}</div>
     <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>
-    ${sp.creator===S.me?'<button class="link" id="sh-mv">📍 ピンの位置を変える（作成者のみ）</button>':''}`;
+    ${posBlock(sp)}`;
     const rest=sp.reports.slice().sort((a,b)=>b.t-a.t);
     h+=`<h3>みんなのルポ（${rest.length}）</h3>`+rest.map(r=>reportCard(r)).join('');
   }
@@ -465,6 +480,10 @@ function refreshSheet(){
   b('#sh-rp',()=>openReport(curId));
   b('#sh-arr',()=>startArrive(curId));
   b('#sh-mv',()=>startPlace(curId));
+  b('#ps-view',()=>showGhost(sp));
+  b('#ps-ask',()=>askPos(curId));
+  b('#ps-demoA',()=>demoVote(curId,'A'));
+  b('#ps-demoB',()=>demoVote(curId,'B'));
   b('#sh-nav',()=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${sp.lat},${sp.lng}&travelmode=walking`,'_blank'));
   b('#sh-tp',()=>{ setPos(sp.lat+0.00005,sp.lng+0.00005); toast('あなたをこのスポットに移動しました'); });
 }
@@ -545,8 +564,8 @@ let moveId=null;   // 位置を変えるスポット（新規作成のときは 
 function endPlace(){ moveId=null; $('#cross').classList.remove('on'); $('#placebar').classList.remove('on'); }
 function startPlace(id){
   moveId=id||null; closeSheet();
-  $('#pl-msg').textContent = moveId ? '地図を動かして、中央の📍を新しい位置に合わせてください' : '地図を動かして、中央の📍を作りたい場所に合わせてください';
-  $('#pl-ok').textContent = moveId ? 'ここに変更' : 'ここに作る';
+  $('#pl-msg').textContent = moveId ? '地図を動かして、中央の📍を「正しい位置」に合わせてください' : '地図を動かして、中央の📍を作りたい場所に合わせてください';
+  $('#pl-ok').textContent = moveId ? 'この位置を提案' : 'ここに作る';
   $('#cross').classList.add('on'); $('#placebar').classList.add('on');
 }
 $('#btn-add').onclick=()=>startPlace(null);
@@ -555,9 +574,16 @@ $('#pl-ok').onclick=()=>{
   const c=map.getCenter(), id=moveId; endPlace();
   if(id){
     const sp=S.spots[id]; if(!sp) return;
-    sp.lat=c.lat; sp.lng=c.lng; save();
-    const m=markers.get(id); if(m) m.m.setLatLng([c.lat,c.lng]);
-    renderTL(); curId=id; refreshSheet(); toast('📍 ピンの位置を変えました');
+    if(sp.prop){ toast('すでに位置を確認中です'); curId=id; refreshSheet(); return; }
+    if(dist(sp,{lat:c.lat,lng:c.lng})<DIVERGE_M){
+      sp.lat=c.lat; sp.lng=c.lng; save();
+      const m=markers.get(id); if(m) m.m.setLatLng([c.lat,c.lng]);
+      toast('📍 ほぼ同じ位置なので、そのまま変更しました');
+    }else{
+      sp.prop={lat:c.lat,lng:c.lng,by:S.me,t:Date.now(),votes:[]}; save();
+      toast('📍 位置を提案しました。到着した人の回答で決まります');
+    }
+    renderTL(); curId=id; refreshSheet();
   }else openReport(null,{lat:c.lat,lng:c.lng});
 };
 $('#btn-locate').onclick=()=>{
@@ -566,6 +592,97 @@ $('#btn-locate').onclick=()=>{
   navigator.geolocation.getCurrentPosition(p=>{ setPos(p.coords.latitude,p.coords.longitude); map.setView([p.coords.latitude,p.coords.longitude],17); },
     ()=>{ map.setView([S.pos.lat,S.pos.lng],17); toast('取得できないため、デモの現在地に移動しました'); },{enableHighAccuracy:true,timeout:8000});
 };
+
+/* ===== ピンの位置：提案 → 到着した人が確認 → 正確なほうを採用 ===== */
+const MOCKS=['ミナト','ハナ','ソウタ','リン','ケン','ユイ','タクミ','サキ','レン'];
+['ユイ','タクミ','サキ','レン'].forEach((u,i)=>{ if(!S.users[u]) S.users[u]={confi:[60,25,130,10][i]}; });
+const vw = u => 1+Math.min(conf(u)/200,1);          // 票の重さ：コンフィが高いほど少し重い（1〜2倍）
+function posState(sp){
+  const v=sp.prop.votes; let a=0,b=0;
+  v.forEach(x=>{ if(x.side==='B') b+=vw(x.user); else a+=vw(x.user); });
+  return {n:v.length,a,b,na:v.filter(x=>x.side==='A').length,nb:v.filter(x=>x.side==='B').length};
+}
+function resolvePos(sp){
+  const st=posState(sp), tot=st.a+st.b;
+  if(st.n<NEED_VOTES) return;
+  let res=null;
+  if(st.b/tot>=ADOPT_RATIO) res='B';
+  else if(st.a/tot>=ADOPT_RATIO) res='A';
+  else if(st.n>=TIE_VOTES) res='A';                  // 割れたままなら、元の位置のまま
+  if(!res) return;
+  const pr=sp.prop;
+  if(res==='B'){
+    sp.lat=pr.lat; sp.lng=pr.lng;
+    const m=markers.get(sp.id); if(m) m.m.setLatLng([sp.lat,sp.lng]);
+    (S.users[pr.by]=S.users[pr.by]||{confi:0}).confi+=POS_CONFI;
+    toast(`📍 ピンの位置が更新されました（${pr.by}さんの提案が採用）`);
+  }else toast('📍 確認の結果、ピンの位置はそのままになりました');
+  sp.lockUntil=Date.now()+COOLDOWN_DAYS*86400e3; sp.prop=null; save(); renderHead(); renderTL();
+}
+function addPosVote(sp,user,side){
+  if(!sp.prop||sp.prop.votes.some(x=>x.user===user)) return false;
+  sp.prop.votes.push({user,side}); save(); resolvePos(sp); return true;
+}
+function canVotePos(sp){
+  return sp.prop && sp.prop.by!==S.me && sp.creator!==S.me && !sp.prop.votes.some(v=>v.user===S.me) && !!S.arrivals[sp.id+'|'+ym()];
+}
+function posBlock(sp){
+  if(sp.prop){
+    const st=posState(sp), tot=(st.a+st.b)||1, left=Math.max(NEED_VOTES-st.n,0), d=dist(sp,sp.prop);
+    return `<div class="pos"><b class="t">📍 ピンの位置を確認中</b>
+      <div class="note">${esc(sp.prop.by)}さんが、位置の変更を提案しています（いまの位置から ${fmtD(d)}）。到着した人の回答で、正確なほうが採用されます。</div>
+      <div class="bars"><i class="a" style="width:${st.a/tot*100}%"></i><i class="b" style="width:${st.b/tot*100}%"></i></div>
+      <div class="nums"><span>A いまの位置 ${st.na}票</span><span>${left?`あと${left}票で決着`:'票が割れています'}</span><span>B 提案 ${st.nb}票</span></div>
+      <div class="row"><button class="btn sm" id="ps-view">🗺️ 2つの位置を見る</button>${canVotePos(sp)?'<button class="btn sm pri" id="ps-ask">どちらが正確？</button>':''}</div>
+      <div class="row"><button class="link" id="ps-demoA">🧪 デモ：誰かがAに投票</button><button class="link" id="ps-demoB">🧪 デモ：誰かがBに投票</button></div></div>`;
+  }
+  if(sp.lockUntil && sp.lockUntil>Date.now()){
+    const days=Math.ceil((sp.lockUntil-Date.now())/86400e3);
+    return `<div class="pos-note">📍 ピンの位置は確認済みです（あと${days}日は、新しい提案ができません）</div>`;
+  }
+  return `<button class="link" id="sh-mv">📍 ピンの位置が違う？位置を提案する</button>`;
+}
+function demoVote(id,side){
+  const sp=S.spots[id]; if(!sp||!sp.prop) return;
+  const u=MOCKS.find(x=>x!==sp.prop.by&&x!==sp.creator&&!sp.prop.votes.some(v=>v.user===x));
+  if(!u){ toast('デモの投票者がもういません'); return; }
+  addPosVote(sp,u,side); refreshSheet();
+}
+let ghost=null;
+function showGhost(sp){
+  if(ghost){ map.removeLayer(ghost); ghost=null; }
+  const q=sp.prop; if(!q) return;
+  ghost=L.circleMarker([q.lat,q.lng],{radius:14,color:'#ff6a3d',weight:3,dashArray:'4 4',fillColor:'#ff6a3d',fillOpacity:.15}).addTo(map);
+  ghost.bindTooltip('B 提案された位置',{permanent:true,direction:'bottom'}).openTooltip();
+  closeSheet(); map.fitBounds([[sp.lat,sp.lng],[q.lat,q.lng]],{padding:[70,70],maxZoom:18});
+  toast('A：いまのピン　B：点線の丸（提案）');
+  setTimeout(()=>{ if(ghost){ map.removeLayer(ghost); ghost=null; } },15000);
+}
+function maybeAskPos(id){ const sp=S.spots[id]; if(sp && canVotePos(sp)) setTimeout(()=>askPos(id),350); }
+function askPos(id){
+  const sp=S.spots[id]; if(!sp||!sp.prop) return;
+  const A={lat:sp.lat,lng:sp.lng}, B={lat:sp.prop.lat,lng:sp.prop.lng};
+  const kx=111320*Math.cos(A.lat*Math.PI/180), ky=110540;
+  const bx=(B.lng-A.lng)*kx, by=-(B.lat-A.lat)*ky;
+  const W=280,H=150,pad=34, sc=Math.min((W-2*pad)/Math.max(Math.abs(bx),1),(H-2*pad)/Math.max(Math.abs(by),1),6);
+  const cx=W/2-bx*sc/2, cy=H/2-by*sc/2, ax=cx, ay=cy, px=cx+bx*sc, py=cy+by*sc;
+  modal(`<h2>ピンの位置は、どちらが正確ですか？</h2>
+    <p>${esc(sp.name)}（2つの位置は ${fmtD(dist(A,B))} 離れています）</p>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="background:var(--bg);border-radius:12px;margin:8px 0">
+      <line x1="${ax}" y1="${ay}" x2="${px}" y2="${py}" stroke="#aeb6c4" stroke-dasharray="4 4"/>
+      <circle cx="${ax}" cy="${ay}" r="9" fill="#8d97aa"/><text x="${ax}" y="${ay+4}" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">A</text>
+      <circle cx="${px}" cy="${py}" r="9" fill="#ff6a3d"/><text x="${px}" y="${py+4}" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">B</text>
+    </svg>
+    <p class="note">いま現地にいるあなたの感覚で選んでください。A：いまのピン　B：提案された位置</p>
+    <div class="row"><button class="btn" data-s="A">A いまの位置</button><button class="btn pri" data-s="B">B 提案の位置</button></div>
+    <button class="link" id="m-x">わからない・あとで</button>`);
+  $('#m-x').onclick=closeModal;
+  $('#modal').querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{
+    const ok=addPosVote(sp,S.me,b.dataset.s); closeModal();
+    if(ok && sp.prop) toast('回答ありがとう！みんなの回答で位置が決まります');
+    refreshSheet();
+  });
+}
 
 /* 到着 → 滞在 → 決めた！ */
 function startArrive(id){
@@ -604,17 +721,17 @@ function showKime(id){
   const list=sp.reports.filter(r=>r.user!==S.me);
   if(!list.length){
     modal(`<div class="big">🎉</div><h2 style="text-align:center">到着しました！</h2><p style="text-align:center">今月のチェックインをカウントしました。<br>このスポットには他の人のルポがまだありません。</p><button class="btn" id="m-x" style="width:100%;margin-top:10px">閉じる</button>`);
-    $('#m-x').onclick=closeModal; return;
+    $('#m-x').onclick=()=>{ closeModal(); maybeAskPos(id); }; return;
   }
   modal(`<div class="big">🎉</div><h2 style="text-align:center">到着しました！</h2>
     <p style="text-align:center;margin-bottom:10px">ここに来ると<b>決めた</b>きっかけになったルポに、<b>「決めた！」</b>を1つ贈ろう。</p>
     ${list.map(r=>`<button class="pick" data-r="${r.id}"><span class="rp-top"><span class="av" style="--c:${avColor(r.user)}">${esc(r.user[0])}</span><span class="rp-user">${esc(r.user)}</span><span class="cf">コンフィ ${conf(r.user)}</span></span><span style="display:block;margin-top:4px">${esc(r.text)}</span><span class="go">🎯 決めた！</span></button>`).join('')}
     <button class="link" id="m-x">きっかけは別にある・あとで</button>`);
-  $('#m-x').onclick=closeModal;
+  $('#m-x').onclick=()=>{ closeModal(); maybeAskPos(id); };
   $('#modal').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{
     const r=sp.reports.find(x=>x.id===b.dataset.r); if(!r) return;
     r.likes++; (S.users[r.user]=S.users[r.user]||{confi:0}).confi+=KIME_CONFI; save();
-    closeModal(); toast(`🎯 決めた！を贈りました。${r.user}さんのコンフィ +${KIME_CONFI}`); refreshSheet(); renderHead();
+    closeModal(); toast(`🎯 決めた！を贈りました。${r.user}さんのコンフィ +${KIME_CONFI}`); refreshSheet(); renderHead(); maybeAskPos(id);
   });
 }
 
@@ -652,7 +769,7 @@ function renderMe(){
       <table id="sim-t"></table>
       <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
     <div class="card"><h4>🧪 試作用の設定</h4><label class="sw"><span>場所の制限なしで、最初のルポを書ける<br><span class="note">本番では、この1週間に訪れた場所の近く（150m以内）に、あとからでも作れます。</span></span><input type="checkbox" id="demo-sw" ${demoOn()?'checked':''}></label></div>
-    <div class="card"><h4>しくみ</h4><div class="note">・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
     <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
   el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
     const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
@@ -671,6 +788,10 @@ function renderMe(){
 }
 
 /* ===== 起動 ===== */
+if(S.spots.d2 && !S.spots.d2.posSeeded){
+  const d2=S.spots.d2; d2.posSeeded=true;
+  d2.prop={lat:d2.lat+0.0005,lng:d2.lng+0.0002,by:'ケン',t:Date.now()-3600e3,votes:[{user:'ソウタ',side:'B'},{user:'リン',side:'A'}]};
+}
 recordVisit(S.pos.lat,S.pos.lng); save();
 renderHead(); syncMarkers(); renderTL(); onMove();
 setTimeout(()=>map.invalidateSize(),100);
