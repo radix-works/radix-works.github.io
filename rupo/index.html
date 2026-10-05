@@ -26,6 +26,7 @@ main{flex:1;position:relative;min-height:0}
 .view.on{display:block}
 #view-map{overflow:hidden}
 #map{position:absolute;inset:0;isolation:isolate;background:#f1f3f6}
+#map .leaflet-tile-pane{filter:grayscale(.6) contrast(.9) brightness(1.06)}
 nav{flex:none;display:flex;background:var(--paper);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:900}
 nav button{flex:1;border:0;background:none;padding:8px 0 7px;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:1px}
 nav button .i{font-size:20px;line-height:1.1;filter:grayscale(1);opacity:.7}
@@ -261,9 +262,9 @@ function rankOf(c){ return c<50?'見習いルポルター':c<200?'ルポルタ�
 
 /* ===== 地図 ===== */
 const map = L.map('map',{zoomControl:false, attributionControl:true}).setView([S.pos.lat,S.pos.lng],16);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-  maxZoom:19, subdomains:'abcd',
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>'
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,
+  attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 const gLayer = L.layerGroup().addTo(map);
 const cLayer = L.layerGroup().addTo(map);
