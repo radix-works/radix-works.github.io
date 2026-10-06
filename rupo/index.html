@@ -37,7 +37,7 @@ nav button.on .i{filter:none;opacity:1}
 .fab{position:absolute;right:12px;z-index:600;border:0;background:var(--paper);box-shadow:0 2px 10px rgba(20,30,50,.22);border-radius:50%;width:44px;height:44px;font-size:20px}
 #btn-locate{bottom:16px}
 #btn-add{bottom:68px;background:var(--accent);color:#fff;font-weight:700;font-size:26px;line-height:1}
-.chip{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:600;background:rgba(27,36,54,.88);color:#fff;font-size:12px;padding:6px 14px;border-radius:99px;max-width:92%;text-align:center;display:none}
+.chip{position:absolute;left:50%;transform:translateX(-50%);top:50px;z-index:600;background:rgba(27,36,54,.88);color:#fff;font-size:12px;padding:6px 14px;border-radius:99px;max-width:92%;text-align:center;display:none}
 .chip.on{display:block}
 .chip button{background:none;border:0;color:#ffd2c4;text-decoration:underline;padding:0 0 0 6px}
 .legend{position:absolute;left:10px;bottom:14px;z-index:600;background:rgba(255,255,255,.94);border-radius:10px;padding:6px 10px;font-size:11px;color:var(--sub);box-shadow:0 1px 6px rgba(20,30,50,.16)}
@@ -69,6 +69,10 @@ nav button.on .i{filter:none;opacity:1}
 .pos .nums{display:flex;justify-content:space-between;font-size:12px;color:var(--sub)}
 .pos .row{margin:8px 0 0;flex-wrap:wrap}
 .pos-note{background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--sub);margin:10px 0}
+.wards{position:absolute;left:0;right:0;top:8px;z-index:650;display:flex;gap:6px;padding:0 10px 4px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.wards::-webkit-scrollbar{display:none}
+.wards button{flex:none;border:0;background:rgba(255,255,255,.96);box-shadow:0 1px 6px rgba(20,30,50,.25);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--ink)}
+.wards button.on{background:var(--ink);color:#fff}
 /* sheet */
 #sheet{position:absolute;left:0;right:0;bottom:0;z-index:800;background:var(--paper);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(20,30,50,.22);max-height:78%;overflow:auto;transform:translateY(105%);transition:transform .28s ease;padding:6px 16px 22px}
 #sheet.on{transform:none}
@@ -164,6 +168,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
   <main>
     <section class="view on" id="view-map">
       <div id="map"></div>
+      <div class="wards" id="wards"></div>
       <div class="chip" id="chip"></div>
       <div class="legend"><i style="background:#fff;border:2px dashed #aeb6c4"></i>ルポ待ち　<i style="background:var(--accent)"></i>ルポ済み</div>
       <div id="cross"><i>📍</i></div>
@@ -277,6 +282,52 @@ function seed(){
 function load(){ try{ const j=localStorage.getItem(KEY); if(j) return JSON.parse(j); }catch(e){} return null; }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast('保存の容量がいっぱいです（写真を減らしてください）'); } }
 S = load() || seed();
+
+/* ===== デモ：東京の中心10区（豊島・文京・中野・新宿・千代田・中央・渋谷・港・目黒・品川） ===== */
+const WARDS = [
+  {n:'豊島',lat:35.7295,lng:139.7109,areas:[['池袋',35.7295,139.7109],['大塚',35.7318,139.7286],['巣鴨',35.7336,139.7393]]},
+  {n:'文京',lat:35.7078,lng:139.7519,areas:[['後楽園',35.7056,139.7519],['本郷',35.7078,139.7619],['千駄木',35.7270,139.7620]]},
+  {n:'中野',lat:35.7058,lng:139.6659,areas:[['中野',35.7058,139.6659],['東中野',35.7071,139.6830],['中野坂上',35.6974,139.6827]]},
+  {n:'新宿',lat:35.6896,lng:139.7006,areas:[['新宿',35.6896,139.7006],['神楽坂',35.7014,139.7387],['高田馬場',35.7126,139.7038]]},
+  {n:'千代田',lat:35.6840,lng:139.7600,areas:[['東京駅',35.6812,139.7671],['秋葉原',35.6984,139.7731],['神保町',35.6959,139.7577]]},
+  {n:'中央',lat:35.6740,lng:139.7690,areas:[['銀座',35.6717,139.7650],['日本橋',35.6841,139.7744],['築地',35.6654,139.7707]]},
+  {n:'渋谷',lat:35.6580,lng:139.7016,areas:[['渋谷',35.6580,139.7016],['恵比寿',35.6467,139.7101],['代々木上原',35.6693,139.6797]]},
+  {n:'港',lat:35.6600,lng:139.7360,areas:[['六本木',35.6628,139.7314],['表参道',35.6654,139.7121],['麻布十番',35.6547,139.7366],['新橋',35.6660,139.7584]]},
+  {n:'目黒',lat:35.6340,lng:139.7000,areas:[['目黒',35.6340,139.7158],['中目黒',35.6440,139.6990],['自由が丘',35.6076,139.6684]]},
+  {n:'品川',lat:35.6200,lng:139.7330,areas:[['品川',35.6285,139.7387],['五反田',35.6262,139.7237],['大井町',35.6064,139.7347]]}
+];
+(function addWardDemos(){
+  const TYPES=['cafe','food','bar','sweets','books','park','shop'];
+  const NAME={cafe:'珈琲',food:'食堂',bar:'酒場',sweets:'パン工房',books:'書店',park:'小さな公園',shop:'雑貨店'};
+  const TXT={
+    cafe:[['平日の午前は空いていて、作業しやすい。','おすすめ'],['夕方以降は混みやすい。','混み具合'],['ブレンドが安くて、おかわりもできる。','価格']],
+    food:[['日替わり定食がおすすめ。昼は少し並ぶ。','おすすめ'],['現金のみなので注意。','注意'],['ごはんの量が多めで、しっかり食べたい日に。','価格']],
+    bar:[['18時の開店直後が狙い目。','穴場'],['ひとり飲みでも入りやすい雰囲気。','雰囲気'],['週末は予約がないと厳しい。','混み具合']],
+    sweets:[['朝いちばんに焼きたてが出る。','穴場'],['人気の品は昼前に売り切れる。','混み具合'],['手土産にしやすい価格帯。','価格']],
+    books:[['小さいけれど、棚がていねいに作られている。','雰囲気'],['店主のおすすめコーナーが当たり。','おすすめ'],['夕方は静かで、ゆっくり選べる。','混み具合']],
+    park:[['夕方の散歩にちょうどいい。ベンチが多い。','雰囲気'],['朝は犬の散歩の人が多い。','混み具合'],['日陰が少ないので夏は注意。','注意']],
+    shop:[['手頃な値段の小物が多く、贈り物を探しやすい。','おすすめ'],['閉店が早めなので注意。','注意'],['店内が狭いので、空いている時間が快適。','混み具合']]
+  };
+  const USERS=['ミナト','ハナ','ソウタ','リン','ケン','ユイ','タクミ','サキ','レン'];
+  const D=86400e3, now=Date.now();
+  let idx=0;
+  WARDS.forEach(w=>w.areas.forEach(([area,lat,lng],ai)=>{
+    for(let k=0;k<2;k++){
+      const id='w'+idx, h=((idx+1)*2654435761)>>>0;
+      idx++;
+      if(S.spots[id]) continue;
+      const cat=TYPES[(idx*3+k*2+ai)%7], tx=TXT[cat];
+      const creator=USERS[h%USERS.length];
+      const nrep=1+(h>>>3)%3, reports=[];
+      for(let r=0;r<nrep;r++){
+        const t=tx[(r+(h>>>5))%3], u=r===0?creator:USERS[(h>>>(7+r))%USERS.length];
+        reports.push({id:'rd'+id+r,user:u,text:t[0],tag:t[1],t:now-((h>>>(9+r))%9+r)*D/3,likes:(h>>>(11+r))%12,photo:null});
+      }
+      S.spots[id]={id,name:`（デモ）${NAME[cat]} ${area}`,lat:lat+(k?-0.0013:0.0011),lng:lng+(k?0.0014:-0.0012),cat,creator,demo:true,ward:w.n,
+        views:20+h%260,checkins:3+(h>>>4)%70,reports};
+    }
+  }));
+})();
 
 const cands = new Map();   // OSMから取り込んだ「ルポ待ち」候補
 const spotData = id => S.spots[id] || cands.get(id);
@@ -416,6 +467,19 @@ function onMove(){
   }
 }
 map.on('moveend',onMove);
+
+/* 10区へジャンプ */
+(function(){
+  const el=$('#wards');
+  el.innerHTML='<button data-h="1">🏠 北池袋</button>'+WARDS.map((w,i)=>`<button data-w="${i}">${w.n}区</button>`).join('');
+  el.onclick=e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    closeSheet();
+    if(b.dataset.h) map.setView([HOME.lat,HOME.lng],16);
+    else{ const w=WARDS[+b.dataset.w]; map.setView([w.lat,w.lng],15); }
+  };
+})();
 
 /* ===== 画面切替 ===== */
 function showView(v){
