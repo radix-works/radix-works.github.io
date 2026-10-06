@@ -41,6 +41,7 @@ nav button.on .i{filter:none;opacity:1}
 .chip.on{display:block}
 .chip button{background:none;border:0;color:#ffd2c4;text-decoration:underline;padding:0 0 0 6px}
 .sp-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.sp-tags span.m{background:var(--ink);color:#fff}
 .sp-tags span{background:#eef1f6;color:var(--sub);font-size:11px;font-weight:700;border-radius:6px;padding:0 7px}
 .legend{position:absolute;left:10px;bottom:14px;z-index:600;background:rgba(255,255,255,.94);border-radius:10px;padding:6px 10px;font-size:11px;color:var(--sub);box-shadow:0 1px 6px rgba(20,30,50,.16)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
@@ -213,6 +214,8 @@ const ADOPT_RATIO = 2/3;                         // 採用に必要な票の割�
 const TIE_VOTES = 10;                            // この票数でも決まらないときは、元の位置のまま
 const COOLDOWN_DAYS = 30;                        // 決着後、再提案できない日数
 const POS_CONFI = 20;                            // 提案が採用されたときに上がるコンフィ
+const OWNER_MAIN_MAX = 3;                        // オーナーが広げられるメインタグの数（みんなが決めた1つを含む）
+const MAX_TAGS = 6;                              // 1つのスポットに付けられるタグの数
 const KEY = 'rupo-proto-v1';
 
 /* メインタグ（1つ）とサブタグ（複数） */
@@ -345,7 +348,11 @@ const WARDS = [
 Object.values(S.spots).forEach(normSpot);
 if(!S.filter) S.filter={main:'eat',sub:null};   // 基本は、ひとつのジャンルだけに絞り込む
 const flt = () => S.filter;
-const matches = sp => sp.cat===flt().main && (!flt().sub || (sp.subs||[]).includes(flt().sub));
+function mainsOf(sp){   // メインタグ：みんなが決めた1つ＋オーナーが広げた分
+  const out=[]; [(sp.subs||[])[0]].concat(sp.extraMains||[]).forEach(x=>{ if(x && !out.includes(x)) out.push(x); });
+  return out;
+}
+const matches = sp => sp.cat===flt().main && (!flt().sub || mainsOf(sp).includes(flt().sub) || (!!flt().incSub && (sp.subs||[]).includes(flt().sub)));
 
 const cands = new Map();   // OSMから取り込んだ「ルポ待ち」候補
 const spotData = id => S.spots[id] || cands.get(id);
@@ -519,14 +526,19 @@ function renderFilter(){
   const subs=MAINS[f.main].subs;
   const sr=$('#subs');
   sr.style.display=subs.length?'flex':'none';
-  sr.innerHTML=subs.length?`<button data-s="" class="${f.sub?'':'on'}">すべて</button>`+subs.map(x=>`<button data-s="${x}" class="${f.sub===x?'on':''}">${SUBE[x]||''} ${x}</button>`).join(''):'';
+  sr.innerHTML=subs.length?`<button data-s="" class="${f.sub?'':'on'}">すべて</button>`+subs.map(x=>`<button data-s="${x}" class="${f.sub===x?'on':''}">${SUBE[x]||''} ${x}</button>`).join('')+(f.sub?`<button data-inc="1" class="${f.incSub?'on':''}">サブタグも含める</button>`:''):'';
 }
 function applyFilter(){
   renderFilter(); syncMarkers(); renderTL();
   if(curId){ const sp=spotData(curId); if(!sp||!matches(sp)) closeSheet(); }
 }
 $('#mains').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; S.filter={main:b.dataset.m,sub:null}; save(); applyFilter(); };
-$('#subs').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; S.filter.sub=b.dataset.s||null; save(); applyFilter(); };
+$('#subs').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.inc){ S.filter.incSub=!S.filter.incSub; }
+  else{ S.filter.sub=b.dataset.s||null; S.filter.incSub=false; }
+  save(); applyFilter();
+};
 
 /* 10区へジャンプ */
 (function(){
@@ -585,7 +597,7 @@ function refreshSheet(){
   <div class="sp-head"><div class="sp-ico" style="--c:${c.c}33">${c.e}</div>
     <div><div class="sp-name">${esc(sp.name)}</div>
     <div class="sp-meta">${c.l} ・ あなたから ${fmtD(d)}${real?` ・ 作成者 ${esc(sp.creator)}`:''}</div>
-    ${(sp.subs||[]).length?`<div class="sp-tags">${sp.subs.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}</div>
+    ${(sp.subs||[]).length?`<div class="sp-tags">${sp.subs.map(x=>`<span class="${mainsOf(sp).includes(x)?'m':''}">${esc(x)}</span>`).join('')}</div>`:''}</div>
     <button class="x" id="sh-x">✕</button></div>
   <div class="stats"><div class="stat"><b>${views}</b>閲覧</div><div class="stat"><b>${checkins}</b>到着</div><div class="stat"><b>${rpn}</b>ルポ</div></div>`;
   if(!real){
@@ -594,7 +606,7 @@ function refreshSheet(){
   }else{
     h+=`<div class="main-info"><span class="tag">✨ メイン情報</span>${mi?reportCard(mi).replace('class="rp"','class="rp" style="border:0;background:none;padding:6px 0 0;margin:0"'):'<div class="empty">まだルポがありません</div>'}</div>
     <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>
-    ${posBlock(sp)}`;
+    ${tagBlock(sp)}${ownerBlock(sp)}${posBlock(sp)}`;
     const rest=sp.reports.slice().sort((a,b)=>b.t-a.t);
     h+=`<h3>みんなのルポ（${rest.length}）</h3>`+rest.map(r=>reportCard(r)).join('');
   }
@@ -605,6 +617,20 @@ function refreshSheet(){
   b('#sh-rp',()=>openReport(curId));
   b('#sh-arr',()=>startArrive(curId));
   b('#sh-mv',()=>startPlace(curId));
+  b('#tg-ask',()=>askMain(curId));
+  b('#tg-add',()=>{ const v=$('#tg-sel').value; if(v){ sp.subs.push(v); save(); toast(`タグ「${v}」を追加しました`); refreshSheet(); } });
+  b('#ow-become',()=>{ sp.owner=S.me; save(); toast('🏪 オーナーとして設定しました（デモ）'); refreshSheet(); });
+  document.querySelectorAll('[data-mv]').forEach(e=>e.onclick=()=>demoMainVote(curId,e.dataset.mv));
+  const oc=$('#ow-chips'); if(oc) oc.onclick=e=>{
+    const x=e.target.closest('button'); if(!x) return; const t=x.dataset.x;
+    sp.extraMains=sp.extraMains||[];
+    if(sp.extraMains.includes(t)) sp.extraMains=sp.extraMains.filter(y=>y!==t);
+    else{
+      if(sp.extraMains.length>=OWNER_MAIN_MAX-1){ toast(`メインタグは、最大${OWNER_MAIN_MAX}つまでです`); return; }
+      sp.extraMains.push(t); if(!sp.subs.includes(t)) sp.subs.push(t);
+    }
+    save(); syncMarkers(); refreshSheet();
+  };
   b('#ps-view',()=>showGhost(sp));
   b('#ps-ask',()=>askPos(curId));
   b('#ps-demoA',()=>demoVote(curId,'A'));
@@ -795,7 +821,7 @@ function showGhost(sp){
   toast('A：いまのピン　B：点線の丸（提案）');
   setTimeout(()=>{ if(ghost){ map.removeLayer(ghost); ghost=null; } },15000);
 }
-function maybeAskPos(id){ const sp=S.spots[id]; if(sp && canVotePos(sp)) setTimeout(()=>askPos(id),350); }
+function maybeAskPos(id){ const sp=S.spots[id]; if(sp && canVotePos(sp)) setTimeout(()=>askPos(id),350); else maybeAskMain(id); }
 function askPos(id){
   const sp=S.spots[id]; if(!sp||!sp.prop) return;
   const A={lat:sp.lat,lng:sp.lng}, B={lat:sp.prop.lat,lng:sp.prop.lng};
@@ -813,10 +839,89 @@ function askPos(id){
     <p class="note">いま現地にいるあなたの感覚で選んでください。A：いまのピン　B：提案された位置</p>
     <div class="row"><button class="btn" data-s="A">A いまの位置</button><button class="btn pri" data-s="B">B 提案の位置</button></div>
     <button class="link" id="m-x">わからない・あとで</button>`);
-  $('#m-x').onclick=closeModal;
+  $('#m-x').onclick=()=>{ closeModal(); maybeAskMain(id); };
   $('#modal').querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{
     const ok=addPosVote(sp,S.me,b.dataset.s); closeModal();
     if(ok && sp.prop) toast('回答ありがとう！みんなの回答で位置が決まります');
+    refreshSheet(); maybeAskMain(id);
+  });
+}
+
+/* ===== メインタグ：到着した人の認知で、お店の「いちばんの顔」が決まる ===== */
+function mvState(sp){
+  const v=(sp.mv&&sp.mv.votes)||[], w={}, n={}; let tot=0;
+  v.forEach(x=>{ const k=vw(x.user); w[x.tag]=(w[x.tag]||0)+k; n[x.tag]=(n[x.tag]||0)+1; tot+=k; });
+  return {n:v.length,w,cnt:n,tot};
+}
+function canVoteMain(sp){
+  return (sp.subs||[]).length>=2 && !(sp.mainLock>Date.now()) && !!S.arrivals[sp.id+'|'+ym()] && !((sp.mv&&sp.mv.votes)||[]).some(v=>v.user===S.me);
+}
+function resolveMain(sp){
+  const st=mvState(sp); if(st.n<NEED_VOTES) return;
+  const ranked=Object.keys(st.w).sort((a,b)=>st.w[b]-st.w[a]);
+  const top=ranked[0], share=st.w[top]/st.tot;
+  let win=null;
+  if(share>=ADOPT_RATIO) win=top;
+  else if(st.n>=TIE_VOTES) win=sp.subs[0];            // 割れたままなら、いまのメインタグのまま
+  if(!win) return;
+  if(win!==sp.subs[0]){
+    sp.subs=[win].concat(sp.subs.filter(x=>x!==win));
+    sp.extraMains=(sp.extraMains||[]).filter(x=>x!==win);
+    toast(`🏷️ メインタグが「${win}」に決まりました`);
+  }else toast(`🏷️ 確認の結果、メインタグは「${win}」のままです`);
+  sp.mainLock=Date.now()+COOLDOWN_DAYS*86400e3; sp.mv={votes:[]}; save(); syncMarkers(); renderTL();
+}
+function addMainVote(sp,user,tag){
+  sp.mv=sp.mv||{votes:[]};
+  if(sp.mv.votes.some(v=>v.user===user)||!(sp.subs||[]).includes(tag)) return false;
+  sp.mv.votes.push({user,tag}); save(); resolveMain(sp); return true;
+}
+function tagBlock(sp){
+  const subs=sp.subs||[]; let h='';
+  if(subs.length>=2){
+    const st=mvState(sp), left=Math.max(NEED_VOTES-st.n,0);
+    const locked=sp.mainLock>Date.now()?Math.ceil((sp.mainLock-Date.now())/86400e3):0;
+    h+=`<div class="pos"><b class="t">🏷️ いちばんの顔（メインタグ）：${esc(subs[0])}</b>
+      <div class="note">お店のメインは、行った人の感覚で決まります。（例：居酒屋が主でランチもある／定食が主で夜はお酒も飲める）</div>
+      <div class="nums" style="flex-wrap:wrap;gap:4px 12px;margin-top:6px">${subs.map(x=>`<span>${esc(x)} ${st.cnt[x]||0}票</span>`).join('')}</div>
+      <div class="note" style="margin-top:4px">${locked?`確認済みです（あと${locked}日は、新しく決め直せません）`:`あと${left}票で決着`}</div>
+      <div class="row">${canVoteMain(sp)?'<button class="btn sm pri" id="tg-ask">どれがいちばん？</button>':''}</div>
+      ${locked?'':`<div class="row">${subs.map(x=>`<button class="link" data-mv="${esc(x)}">🧪 誰かが「${esc(x)}」に投票</button>`).join('')}</div>`}</div>`;
+  }
+  const avail=MAINS[sp.cat].subs.filter(x=>!subs.includes(x));
+  if((S.arrivals[sp.id+'|'+ym()]||demoOn()) && subs.length<MAX_TAGS && avail.length){
+    h+=`<div class="row" style="align-items:center"><select id="tg-sel" style="flex:1">${avail.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select><button class="btn sm" id="tg-add">＋ タグを追加</button></div>`;
+  }
+  return h;
+}
+function ownerBlock(sp){
+  if(sp.owner===S.me){
+    const extra=(sp.extraMains||[]), slots=OWNER_MAIN_MAX-1;
+    return `<div class="pos" style="border-style:solid;border-color:var(--ink);background:var(--bg)"><b class="t">🏪 オーナー設定</b>
+      <div class="note">メインタグを、みんなが決めた「${esc(sp.subs[0]||'')}」に加えて、最大${OWNER_MAIN_MAX}つまで広げられます（あと${slots-extra.length}つ）。</div>
+      <div class="chips" id="ow-chips">${MAINS[sp.cat].subs.filter(x=>x!==sp.subs[0]).map(x=>`<button data-x="${esc(x)}" class="${extra.includes(x)?'on':''}">${esc(x)}</button>`).join('')}</div></div>`;
+  }
+  return sp.owner?'<div class="pos-note">🏪 オーナー確認済み</div>':'<button class="link" id="ow-become">🧪 デモ：このお店のオーナーになる（本番は契約と本人確認が必要）</button>';
+}
+function demoMainVote(id,tag){
+  const sp=S.spots[id]; if(!sp) return;
+  const used=((sp.mv&&sp.mv.votes)||[]).map(v=>v.user);
+  const u=MOCKS.find(x=>!used.includes(x));
+  if(!u){ toast('デモの投票者がもういません'); return; }
+  addMainVote(sp,u,tag); refreshSheet();
+}
+function maybeAskMain(id){ const sp=S.spots[id]; if(sp && canVoteMain(sp)) setTimeout(()=>askMain(id),350); }
+function askMain(id){
+  const sp=S.spots[id]; if(!sp) return;
+  modal(`<h2>このお店のいちばんの顔は？</h2>
+    <p>${esc(sp.name)}</p>
+    <p class="note">たとえば「居酒屋が主で、ランチもやっている」「定食が主で、夜はお酒も飲める」のように、行ったあなたの感覚で選んでください。</p>
+    ${sp.subs.map(x=>`<button class="pick" data-t="${esc(x)}"><b>${SUBE[x]||''} ${esc(x)}</b></button>`).join('')}
+    <button class="link" id="m-x">わからない・あとで</button>`);
+  $('#m-x').onclick=closeModal;
+  $('#modal').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{
+    const ok=addMainVote(sp,S.me,b.dataset.t); closeModal();
+    if(ok && !(sp.mainLock>Date.now())) toast('回答ありがとう！みんなの回答でメインタグが決まります');
     refreshSheet();
   });
 }
@@ -906,7 +1011,7 @@ function renderMe(){
       <table id="sim-t"></table>
       <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
     <div class="card"><h4>🧪 試作用の設定</h4><label class="sw"><span>場所の制限なしで、最初のルポを書ける<br><span class="note">本番では、この1週間に訪れた場所の近く（150m以内）に、あとからでも作れます。</span></span><input type="checkbox" id="demo-sw" ${demoOn()?'checked':''}></label></div>
-    <div class="card"><h4>しくみ</h4><div class="note">・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・お店のいちばんの顔（メインタグ）は、到着した人の回答で決まる。オーナーは、メインタグを最大3つまで広げられる<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
     <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
   el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
     const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
@@ -928,6 +1033,11 @@ function renderMe(){
 if(S.spots.d2 && !S.spots.d2.posSeeded){
   const d2=S.spots.d2; d2.posSeeded=true;
   d2.prop={lat:d2.lat+0.0005,lng:d2.lng+0.0002,by:'ケン',t:Date.now()-3600e3,votes:[{user:'ソウタ',side:'B'},{user:'リン',side:'A'}]};
+}
+if(S.spots.d2 && !S.spots.d2.tagSeeded){ const d=S.spots.d2; d.tagSeeded=true; if(!d.subs.includes('居酒屋・バー')) d.subs.push('居酒屋・バー'); }
+if(S.spots.d5 && !S.spots.d5.tagSeeded){
+  const d=S.spots.d5; d.tagSeeded=true; if(!d.subs.includes('居酒屋・バー')) d.subs.push('居酒屋・バー');
+  d.mv={votes:[{user:'ハナ',tag:d.subs[0]},{user:'リン',tag:'居酒屋・バー'}]};
 }
 recordVisit(S.pos.lat,S.pos.lng); save();
 renderHead(); renderFilter(); syncMarkers(); renderTL(); onMove();
