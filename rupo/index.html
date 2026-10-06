@@ -895,6 +895,7 @@ function tagBlock(sp){
   return h;
 }
 function ownerBlock(sp){
+  if(sp.cat!=='eat') return '';   // メインタグの拡張は、いまは飲食店のオーナーだけ
   if(sp.owner===S.me){
     const extra=(sp.extraMains||[]), slots=OWNER_MAIN_MAX-1;
     return `<div class="pos" style="border-style:solid;border-color:var(--ink);background:var(--bg)"><b class="t">🏪 オーナー設定</b>
@@ -1011,7 +1012,7 @@ function renderMe(){
       <table id="sim-t"></table>
       <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
     <div class="card"><h4>🧪 試作用の設定</h4><label class="sw"><span>場所の制限なしで、最初のルポを書ける<br><span class="note">本番では、この1週間に訪れた場所の近く（150m以内）に、あとからでも作れます。</span></span><input type="checkbox" id="demo-sw" ${demoOn()?'checked':''}></label></div>
-    <div class="card"><h4>しくみ</h4><div class="note">・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・お店のいちばんの顔（メインタグ）は、到着した人の回答で決まる。オーナーは、メインタグを最大3つまで広げられる<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・お店のいちばんの顔（メインタグ）は、到着した人の回答で決まる。飲食店のオーナーは、メインタグを最大3つまで広げられる<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
     <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
   el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
     const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
