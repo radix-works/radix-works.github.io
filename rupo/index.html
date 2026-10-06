@@ -37,9 +37,11 @@ nav button.on .i{filter:none;opacity:1}
 .fab{position:absolute;right:12px;z-index:600;border:0;background:var(--paper);box-shadow:0 2px 10px rgba(20,30,50,.22);border-radius:50%;width:44px;height:44px;font-size:20px}
 #btn-locate{bottom:16px}
 #btn-add{bottom:68px;background:var(--accent);color:#fff;font-weight:700;font-size:26px;line-height:1}
-.chip{position:absolute;left:50%;transform:translateX(-50%);top:50px;z-index:600;background:rgba(27,36,54,.88);color:#fff;font-size:12px;padding:6px 14px;border-radius:99px;max-width:92%;text-align:center;display:none}
+.chip{pointer-events:auto;align-self:center;z-index:600;background:rgba(27,36,54,.88);color:#fff;font-size:12px;padding:6px 14px;border-radius:99px;max-width:92%;text-align:center;display:none}
 .chip.on{display:block}
 .chip button{background:none;border:0;color:#ffd2c4;text-decoration:underline;padding:0 0 0 6px}
+.sp-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.sp-tags span{background:#eef1f6;color:var(--sub);font-size:11px;font-weight:700;border-radius:6px;padding:0 7px}
 .legend{position:absolute;left:10px;bottom:14px;z-index:600;background:rgba(255,255,255,.94);border-radius:10px;padding:6px 10px;font-size:11px;color:var(--sub);box-shadow:0 1px 6px rgba(20,30,50,.16)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:4px}
 
@@ -69,7 +71,12 @@ nav button.on .i{filter:none;opacity:1}
 .pos .nums{display:flex;justify-content:space-between;font-size:12px;color:var(--sub)}
 .pos .row{margin:8px 0 0;flex-wrap:wrap}
 .pos-note{background:var(--bg);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--sub);margin:10px 0}
-.wards{position:absolute;left:0;right:0;top:8px;z-index:650;display:flex;gap:6px;padding:0 10px 4px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+#topbar{position:absolute;left:0;right:0;top:8px;z-index:650;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.wards{pointer-events:auto;display:flex;gap:6px;padding:0 10px 4px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.wards.main button{font-size:13px;padding:6px 13px}
+.wards.sub button{background:rgba(255,255,255,.88);font-weight:600;box-shadow:0 1px 4px rgba(20,30,50,.18)}
+.wards.sub button.on{background:var(--accent);color:#fff}
+.wards.ward button{font-size:11px;padding:4px 10px;opacity:.92}
 .wards::-webkit-scrollbar{display:none}
 .wards button{flex:none;border:0;background:rgba(255,255,255,.96);box-shadow:0 1px 6px rgba(20,30,50,.25);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--ink)}
 .wards button.on{background:var(--ink);color:#fff}
@@ -168,8 +175,7 @@ textarea:focus,input:focus,select:focus{outline:none;border-color:var(--ink)}
   <main>
     <section class="view on" id="view-map">
       <div id="map"></div>
-      <div class="wards" id="wards"></div>
-      <div class="chip" id="chip"></div>
+      <div id="topbar"><div class="wards main" id="mains"></div><div class="wards sub" id="subs"></div><div class="wards ward" id="wards"></div><div class="chip" id="chip"></div></div>
       <div class="legend"><i style="background:#fff;border:2px dashed #aeb6c4"></i>ルポ待ち　<i style="background:var(--accent)"></i>ルポ済み</div>
       <div id="cross"><i>📍</i></div>
       <div id="placebar"><p><b id="pl-msg">地図を動かして、中央の📍を作りたい場所に合わせてください</b></p><div class="row" style="margin:0"><button class="btn" id="pl-x">やめる</button><button class="btn pri" id="pl-ok">ここに作る</button></div></div>
@@ -209,18 +215,26 @@ const COOLDOWN_DAYS = 30;                        // 決着後、再提案でき�
 const POS_CONFI = 20;                            // 提案が採用されたときに上がるコンフィ
 const KEY = 'rupo-proto-v1';
 
-const CATS = {
-  food:  {e:'🍽️', l:'ごはん',     c:'#ff8a5b'},
-  cafe:  {e:'☕',  l:'カフェ',     c:'#c08a5a'},
-  bar:   {e:'🍺',  l:'お酒',       c:'#e0a82e'},
-  sweets:{e:'🍰',  l:'パン・スイーツ', c:'#f27da5'},
-  shop:  {e:'🛍️', l:'お買い物',   c:'#6c8cff'},
-  books: {e:'📚',  l:'本',         c:'#7a6cd6'},
-  park:  {e:'🌳',  l:'公園',       c:'#4cb782'},
-  fun:   {e:'🎬',  l:'遊ぶ・見る', c:'#3fb6c9'},
-  relax: {e:'♨️',  l:'癒し',       c:'#e07a7a'},
-  other: {e:'📍',  l:'その他',     c:'#8d97aa'}
+/* メインタグ（1つ）とサブタグ（複数） */
+const MAINS = {
+  eat:    {e:'🍽️', l:'飲食店',     c:'#ff8a5b', subs:['ラーメン','定食・食堂','和食','洋食','中華','カフェ','居酒屋・バー','パン・スイーツ','ファストフード']},
+  shop:   {e:'🛍️', l:'買い物',     c:'#6c8cff', subs:['コンビニ','スーパー','服','雑貨','ドラッグストア','百貨店・モール','酒・食品']},
+  culture:{e:'📚',  l:'本・文化',   c:'#7a6cd6', subs:['書店','図書館','美術館・博物館','映画館']},
+  park:   {e:'🌳',  l:'公園・自然', c:'#4cb782', subs:['公園','庭園']},
+  fun:    {e:'🎬',  l:'遊び',       c:'#3fb6c9', subs:['カラオケ','ゲーム','劇場']},
+  relax:  {e:'♨️',  l:'癒し・運動', c:'#e07a7a', subs:['銭湯','ジム']},
+  other:  {e:'📍',  l:'その他',     c:'#8d97aa', subs:[]}
 };
+const CATS = MAINS;
+const SUBE = {'ラーメン':'🍜','定食・食堂':'🍚','和食':'🍣','洋食':'🍝','中華':'🥟','カフェ':'☕','居酒屋・バー':'🍺','パン・スイーツ':'🍰','ファストフード':'🍔',
+  'コンビニ':'🏪','スーパー':'🛒','服':'👕','雑貨':'🎁','ドラッグストア':'💊','百貨店・モール':'🏬','酒・食品':'🍶',
+  '書店':'📚','図書館':'🏛️','美術館・博物館':'🖼️','映画館':'🎬','公園':'🌳','庭園':'🌷','カラオケ':'🎤','ゲーム':'🎮','劇場':'🎭','銭湯':'♨️','ジム':'🏋️'};
+const OLDCAT = {food:['eat','定食・食堂'],cafe:['eat','カフェ'],bar:['eat','居酒屋・バー'],sweets:['eat','パン・スイーツ'],shop:['shop','雑貨'],books:['culture','書店'],park:['park','公園'],fun:['fun',null],relax:['relax',null],other:['other',null]};
+function normSpot(sp){
+  if(!sp.subs){ const o=OLDCAT[sp.cat]; if(o){ sp.cat=o[0]; sp.subs=o[1]?[o[1]]:[]; } else sp.subs=[]; }
+  if(!MAINS[sp.cat]) sp.cat='other';
+}
+const spotEmoji = sp => SUBE[(sp.subs||[])[0]] || (MAINS[sp.cat]||MAINS.other).e;
 const TAGS = ['おすすめ','雰囲気','混み具合','価格','注意','穴場'];
 const AVC = ['#ff8a5b','#4cb782','#6c8cff','#e0a82e','#f27da5','#3fb6c9','#7a6cd6'];
 
@@ -328,6 +342,10 @@ const WARDS = [
     }
   }));
 })();
+Object.values(S.spots).forEach(normSpot);
+if(!S.filter) S.filter={main:'eat',sub:null};   // 基本は、ひとつのジャンルだけに絞り込む
+const flt = () => S.filter;
+const matches = sp => sp.cat===flt().main && (!flt().sub || (sp.subs||[]).includes(flt().sub));
 
 const cands = new Map();   // OSMから取り込んだ「ルポ待ち」候補
 const spotData = id => S.spots[id] || cands.get(id);
@@ -377,14 +395,16 @@ function setPos(lat,lng,move){
 function iconFor(sp,real,pop){
   const c=CATS[sp.cat]||CATS.other;
   if(!real) return L.divIcon({className:'',html:'<div class="gpin"></div>',iconSize:[14,14],iconAnchor:[7,7]});
-  return L.divIcon({className:'',html:`<div class="pin${pop?' pop':''}" style="--c:${c.c}"><span>${c.e}</span></div>`,iconSize:[34,34],iconAnchor:[6,34]});
+  return L.divIcon({className:'',html:`<div class="pin${pop?' pop':''}" style="--c:${c.c}"><span>${spotEmoji(sp)}</span></div>`,iconSize:[34,34],iconAnchor:[6,34]});
 }
 function syncMarkers(){
   const all = new Map();
   cands.forEach((v,k)=>all.set(k,v));
   Object.keys(S.spots).forEach(k=>all.set(k,S.spots[k]));
+  markers.forEach((m,id)=>{ const sp=all.get(id); if(!sp||!matches(sp)){ (m.real?cLayer:gLayer).removeLayer(m.m); markers.delete(id); } });
   all.forEach((sp,id)=>{
-    const real=isReal(id), key=(real?'r':'g')+sp.cat;
+    if(!matches(sp)) return;                 // 選んだジャンルのスポットだけを出す
+    const real=isReal(id), key=(real?'r':'g')+sp.cat+((sp.subs||[])[0]||'');
     let m=markers.get(id);
     if(m && m.key!==key){ (m.real?cLayer:gLayer).removeLayer(m.m); markers.delete(id); m=null; }
     if(!m){
@@ -401,18 +421,41 @@ function syncMarkers(){
 /* OSM(Overpass)からお店の候補を取得 */
 const ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 let fetched=[], loading=false, failed=false;
-function catOfTags(t){
-  const a=t.amenity, s=t.shop, l=t.leisure, to=t.tourism;
-  if(a==='cafe') return 'cafe';
-  if(['restaurant','fast_food','food_court'].includes(a)) return 'food';
-  if(['bar','pub','izakaya'].includes(a)) return 'bar';
-  if(['ice_cream'].includes(a)||['bakery','confectionery'].includes(s)) return 'sweets';
-  if(a==='library'||s==='books') return 'books';
-  if(l==='park'||l==='garden') return 'park';
-  if(['cinema','karaoke_box','theatre'].includes(a)||l==='amusement_arcade'||['museum','gallery','attraction'].includes(to)) return 'fun';
-  if(a==='public_bath'||l==='fitness_centre') return 'relax';
-  if(s) return 'shop';
-  return 'other';
+function classify(t){
+  const a=t.amenity, sh=t.shop, l=t.leisure, to=t.tourism, cu=t.cuisine||'';
+  if(a==='cafe') return {cat:'eat',subs:['カフェ']};
+  if(a==='restaurant'||a==='food_court'){
+    const subs=[];
+    if(/ramen/.test(cu)) subs.push('ラーメン');
+    if(/chinese/.test(cu)) subs.push('中華');
+    if(/japanese|sushi|udon|soba|yakitori|tempura|tonkatsu|unagi|okonomiyaki|izakaya/.test(cu)) subs.push('和食');
+    if(/italian|french|pizza|steak|american|spanish|german|burger/.test(cu)) subs.push('洋食');
+    return {cat:'eat',subs};
+  }
+  if(a==='fast_food') return {cat:'eat',subs:['ファストフード']};
+  if(['bar','pub','izakaya'].includes(a)) return {cat:'eat',subs:['居酒屋・バー']};
+  if(a==='ice_cream'||['bakery','confectionery'].includes(sh)) return {cat:'eat',subs:['パン・スイーツ']};
+  if(sh==='books') return {cat:'culture',subs:['書店']};
+  if(a==='library') return {cat:'culture',subs:['図書館']};
+  if(['museum','gallery'].includes(to)) return {cat:'culture',subs:['美術館・博物館']};
+  if(a==='cinema') return {cat:'culture',subs:['映画館']};
+  if(l==='park') return {cat:'park',subs:['公園']};
+  if(l==='garden') return {cat:'park',subs:['庭園']};
+  if(a==='karaoke_box') return {cat:'fun',subs:['カラオケ']};
+  if(l==='amusement_arcade') return {cat:'fun',subs:['ゲーム']};
+  if(a==='theatre') return {cat:'fun',subs:['劇場']};
+  if(to==='attraction') return {cat:'fun',subs:[]};
+  if(a==='public_bath') return {cat:'relax',subs:['銭湯']};
+  if(l==='fitness_centre') return {cat:'relax',subs:['ジム']};
+  if(sh==='convenience') return {cat:'shop',subs:['コンビニ']};
+  if(sh==='supermarket') return {cat:'shop',subs:['スーパー']};
+  if(sh==='clothes') return {cat:'shop',subs:['服']};
+  if(['drugstore','cosmetics'].includes(sh)) return {cat:'shop',subs:['ドラッグストア']};
+  if(['department_store','mall'].includes(sh)) return {cat:'shop',subs:['百貨店・モール']};
+  if(sh==='alcohol') return {cat:'shop',subs:['酒・食品']};
+  if(['variety_store','electronics'].includes(sh)) return {cat:'shop',subs:['雑貨']};
+  if(sh) return {cat:'shop',subs:[]};
+  return {cat:'other',subs:[]};
 }
 function inside(b,f){ return b.s>=f.s&&b.n<=f.n&&b.w>=f.w&&b.e<=f.e; }
 async function loadSpots(force){
@@ -423,10 +466,10 @@ async function loadSpots(force){
   loading=true; setChip('お店の位置を読み込み中…');
   const bx=`(${b.s},${b.w},${b.n},${b.e})`;
   const q=`[out:json][timeout:25];(`+
-    `nwr["name"]["amenity"~"^(restaurant|cafe|fast_food|bar|pub|izakaya|food_court|ice_cream|cinema|library|public_bath|karaoke_box|theatre)$"]${bx};`+
-    `nwr["name"]["shop"~"^(bakery|books|convenience|supermarket|clothes|variety_store|confectionery|alcohol|department_store|mall|electronics|cosmetics|drugstore)$"]${bx};`+
-    `nwr["name"]["leisure"~"^(park|garden|fitness_centre|amusement_arcade)$"]${bx};`+
-    `nwr["name"]["tourism"~"^(museum|gallery|attraction)$"]${bx};`+
+    `nwr["name"][!"industrial"][!"craft"]["amenity"~"^(restaurant|cafe|fast_food|bar|pub|izakaya|food_court|ice_cream|cinema|library|public_bath|karaoke_box|theatre)$"]${bx};`+
+    `nwr["name"][!"industrial"][!"craft"]["shop"~"^(bakery|books|convenience|supermarket|clothes|variety_store|confectionery|alcohol|department_store|mall|electronics|cosmetics|drugstore)$"]${bx};`+
+    `nwr["name"][!"industrial"][!"craft"]["leisure"~"^(park|garden|fitness_centre|amusement_arcade)$"]${bx};`+
+    `nwr["name"][!"industrial"][!"craft"]["tourism"~"^(museum|gallery|attraction)$"]${bx};`+
     `);out center 500;`;
   let data=null;
   for(const ep of ENDPOINTS){
@@ -444,7 +487,8 @@ async function loadSpots(force){
     if(lat==null||!el.tags||!el.tags.name) continue;
     const id='osm:'+el.type+'/'+el.id;
     if(cands.has(id)||S.spots[id]) continue;
-    cands.set(id,{id,name:el.tags.name,lat,lng,cat:catOfTags(el.tags),osm:true});
+    const k=classify(el.tags);
+    cands.set(id,{id,name:el.tags.name,lat,lng,cat:k.cat,subs:k.subs,osm:true});
     n++;
   }
   syncMarkers(); setChip(null);
@@ -467,6 +511,22 @@ function onMove(){
   }
 }
 map.on('moveend',onMove);
+
+/* ジャンルの絞り込み（メインタグ → サブタグ） */
+function renderFilter(){
+  const f=flt();
+  $('#mains').innerHTML=Object.keys(MAINS).map(k=>`<button data-m="${k}" class="${f.main===k?'on':''}">${MAINS[k].e} ${MAINS[k].l}</button>`).join('');
+  const subs=MAINS[f.main].subs;
+  const sr=$('#subs');
+  sr.style.display=subs.length?'flex':'none';
+  sr.innerHTML=subs.length?`<button data-s="" class="${f.sub?'':'on'}">すべて</button>`+subs.map(x=>`<button data-s="${x}" class="${f.sub===x?'on':''}">${SUBE[x]||''} ${x}</button>`).join(''):'';
+}
+function applyFilter(){
+  renderFilter(); syncMarkers(); renderTL();
+  if(curId){ const sp=spotData(curId); if(!sp||!matches(sp)) closeSheet(); }
+}
+$('#mains').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; S.filter={main:b.dataset.m,sub:null}; save(); applyFilter(); };
+$('#subs').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; S.filter.sub=b.dataset.s||null; save(); applyFilter(); };
 
 /* 10区へジャンプ */
 (function(){
@@ -524,7 +584,8 @@ function refreshSheet(){
   let h=`<div class="grab"></div>
   <div class="sp-head"><div class="sp-ico" style="--c:${c.c}33">${c.e}</div>
     <div><div class="sp-name">${esc(sp.name)}</div>
-    <div class="sp-meta">${c.l} ・ あなたから ${fmtD(d)}${real?` ・ 作成者 ${esc(sp.creator)}`:''}</div></div>
+    <div class="sp-meta">${c.l} ・ あなたから ${fmtD(d)}${real?` ・ 作成者 ${esc(sp.creator)}`:''}</div>
+    ${(sp.subs||[]).length?`<div class="sp-tags">${sp.subs.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}</div>
     <button class="x" id="sh-x">✕</button></div>
   <div class="stats"><div class="stat"><b>${views}</b>閲覧</div><div class="stat"><b>${checkins}</b>到着</div><div class="stat"><b>${rpn}</b>ルポ</div></div>`;
   if(!real){
@@ -583,14 +644,16 @@ function openReport(id,loc){
   const target = isNew ? loc : sp;
   const away = first && target && !canCreateAt(target);
   const far = away && !demoOn();
-  let tag=TAGS[0], photo=null, cat=isNew?'food':sp.cat;
+  let tag=TAGS[0], photo=null;
+  let mainSel=isNew?flt().main:sp.cat, subSel=isNew?[]:(sp.subs||[]).slice();
   modal(`<h2>${isNew?'新しいスポットを作ってルポる':esc(sp.name)+' をルポる'}</h2>
     ${first?`<div class="${far?'warn':'good'}">${far
       ? `📍 最初のルポは、<b>この${VISIT_DAYS}日以内に訪れた場所の近く</b>で書けます。この場所には、まだ訪れた記録がありません。<br><button class="link" id="rp-tp">🧪 デモ：この場所を訪れたことにする</button>`
       : '🎉 あなたが最初のルポルターです。書くとこのスポットの<b>作成者</b>になります。'+(away?'<br><span class="note">🧪 デモモード：本番では、この${VISIT_DAYS}日以内に訪れた場所の近くだけ書けます。</span>':'')}</div>`:''}
-    ${isNew?`<p>スポット名</p><input type="text" id="rp-name" maxlength="40" placeholder="例：〇〇食堂">
-      <p>ジャンル</p><select id="rp-cat">${Object.keys(CATS).map(k=>`<option value="${k}">${CATS[k].e} ${CATS[k].l}</option>`).join('')}</select>
-      <p>場所：地図で選んだ位置に作ります</p>`:''}
+    ${isNew?`<p>スポット名</p><input type="text" id="rp-name" maxlength="40" placeholder="例：〇〇食堂">`:''}
+    ${first?`<p>メインタグ（ジャンル・ひとつ）</p><select id="rp-main">${Object.keys(MAINS).map(k=>`<option value="${k}" ${k===mainSel?'selected':''}>${MAINS[k].e} ${MAINS[k].l}</option>`).join('')}</select>
+      <p>サブタグ（複数選べます）</p><div class="chips" id="rp-subs"></div>`:''}
+    ${isNew?'<p class="note">場所：地図で選んだ位置に作ります</p>':''}
     <p>ルポの内容（行ってみて分かったこと）</p>
     <textarea id="rp-text" maxlength="300" placeholder="例：平日の昼は空いていて、日替わりが安い。現金のみ。"></textarea>
     <div class="chips" id="rp-tags">${TAGS.map((t,i)=>`<button data-t="${t}" class="${i?'':'on'}">${t}</button>`).join('')}</div>
@@ -599,6 +662,16 @@ function openReport(id,loc){
     <div class="note" id="rp-phn" style="margin-top:6px"></div>
     <button class="link" id="rp-x" style="margin-top:6px">やめる</button>`);
   $('#rp-x').onclick=closeModal;
+  const drawSubs=()=>{
+    const box=$('#rp-subs'); if(!box) return;
+    const list=MAINS[mainSel].subs;
+    box.innerHTML=list.length?list.map(x=>`<button data-x="${x}" class="${subSel.includes(x)?'on':''}">${x}</button>`).join(''):'<span class="note">この分類には、サブタグはありません</span>';
+  };
+  if($('#rp-main')){
+    drawSubs();
+    $('#rp-main').onchange=e=>{ mainSel=e.target.value; subSel=subSel.filter(x=>MAINS[mainSel].subs.includes(x)); drawSubs(); };
+    $('#rp-subs').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; const x=b.dataset.x; subSel=subSel.includes(x)?subSel.filter(y=>y!==x):subSel.concat(x); drawSubs(); };
+  }
   const tp=$('#rp-tp'); if(tp) tp.onclick=()=>{ setPos(target.lat+0.00005,target.lng+0.00005); openReport(id,loc); };
   $('#rp-tags').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; tag=b.dataset.t; [...$('#rp-tags').children].forEach(x=>x.classList.toggle('on',x===b)); };
   $('#rp-ph').onclick=()=>$('#rp-photo').click();
@@ -610,15 +683,15 @@ function openReport(id,loc){
     if(isNew){
       const nm=$('#rp-name').value.trim();
       if(!nm){ toast('スポット名を入れてください'); return; }
-      cat=$('#rp-cat').value;
       spotId=rid('u'); created=true;
-      S.spots[spotId]={id:spotId,name:nm,lat:loc.lat,lng:loc.lng,cat,creator:S.me,views:0,checkins:0,reports:[]};
+      S.spots[spotId]={id:spotId,name:nm,lat:loc.lat,lng:loc.lng,cat:mainSel,subs:subSel,creator:S.me,views:0,checkins:0,reports:[]};
     }else if(!isReal(id)){
       const c=cands.get(id);
-      S.spots[id]={id,name:c.name,lat:c.lat,lng:c.lng,cat:c.cat,creator:S.me,views:0,checkins:0,reports:[],osm:true};
+      S.spots[id]={id,name:c.name,lat:c.lat,lng:c.lng,cat:mainSel,subs:subSel,creator:S.me,views:0,checkins:0,reports:[],osm:true};
       created=true; popId=id;
     }
     S.spots[spotId].reports.push({id:rid('r'),user:S.me,text,tag,t:Date.now(),likes:0,photo});
+    if(created && !matches(S.spots[spotId])){ S.filter={main:S.spots[spotId].cat,sub:null}; renderFilter(); }   // 作ったスポットが見えるジャンルに切り替える
     save(); closeModal(); popId=spotId; syncMarkers(); renderTL(); renderHead();
     if(created){ toast('🎉 色がつきました！あなたがこのスポットの作成者です'); const s=S.spots[spotId]; map.panTo([s.lat,s.lng]); curId=spotId; refreshSheet(); }
     else { toast('ルポを投稿しました'); refreshSheet(); }
@@ -802,13 +875,13 @@ function showKime(id){
 /* ===== タイムライン ===== */
 function renderTL(){
   const el=$('#tl'); if(!el) return;
-  const items=[]; Object.values(S.spots).forEach(sp=>sp.reports.forEach(r=>items.push({r,sp,d:dist(S.pos,sp)})));
+  const items=[]; Object.values(S.spots).filter(matches).forEach(sp=>sp.reports.forEach(r=>items.push({r,sp,d:dist(S.pos,sp)})));
   let rad=500; const steps=[500,1000,2000,5000,10000,30000];
   for(const s of steps){ rad=s; if(items.filter(i=>i.d<=s).length>=5) break; }
   const list=items.filter(i=>i.d<=rad).sort((a,b)=>b.r.t-a.r.t);
   el.innerHTML=`<div class="tl-head"><b>近くのルポ</b><span>半径 ${rad>=1000?rad/1000+'km':rad+'m'} 以内（${list.length}件）</span></div>`+
     (list.length?list.map(i=>`<div data-s="${i.sp.id}" style="cursor:pointer">${reportCard(i.r,{spot:i.sp.name,d:i.d})}</div>`).join(''):'<div class="empty">近くにルポがありません。最初のルポルターになろう！</div>')+
-    `<p class="note">表示件数が少ないときは、半径が自動で広がります。</p>`;
+    `<p class="note">地図で選んだジャンル（${MAINS[flt().main].l}${flt().sub?' › '+flt().sub:''}）のルポだけを表示しています。件数が少ないときは、半径が自動で広がります。</p>`;
   el.querySelectorAll('[data-s]').forEach(e=>e.onclick=()=>{ showView('map'); const sp=S.spots[e.dataset.s]; map.setView([sp.lat,sp.lng],17); openSheet(sp.id); });
 }
 
@@ -833,7 +906,7 @@ function renderMe(){
       <table id="sim-t"></table>
       <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
     <div class="card"><h4>🧪 試作用の設定</h4><label class="sw"><span>場所の制限なしで、最初のルポを書ける<br><span class="note">本番では、この1週間に訪れた場所の近く（150m以内）に、あとからでも作れます。</span></span><input type="checkbox" id="demo-sw" ${demoOn()?'checked':''}></label></div>
-    <div class="card"><h4>しくみ</h4><div class="note">・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
     <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
   el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
     const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
@@ -857,7 +930,7 @@ if(S.spots.d2 && !S.spots.d2.posSeeded){
   d2.prop={lat:d2.lat+0.0005,lng:d2.lng+0.0002,by:'ケン',t:Date.now()-3600e3,votes:[{user:'ソウタ',side:'B'},{user:'リン',side:'A'}]};
 }
 recordVisit(S.pos.lat,S.pos.lng); save();
-renderHead(); syncMarkers(); renderTL(); onMove();
+renderHead(); renderFilter(); syncMarkers(); renderTL(); onMove();
 setTimeout(()=>map.invalidateSize(),100);
 })();
 </script>
