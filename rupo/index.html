@@ -217,11 +217,32 @@ const COOLDOWN_DAYS = 30;                        // 決着後、再提案でき�
 const POS_CONFI = 20;                            // 提案が採用されたときに上がるコンフィ
 const OWNER_MAIN_MAX = 3;                        // オーナーが広げられるメインタグの数（みんなが決めた1つを含む）
 const ATTRS = {   // お店の条件：到着した人の回答で決まる
-  smoke:  {title:'喫煙ルール', ico:'🚬', unk:'喫煙：未登録',   all:'🚬 喫煙：指定なし',   opts:{no:'🚭 禁煙',e:'💨 電子たばこのみ',sep:'分煙（喫煙席あり）',yes:'🚬 喫煙可'}},
+  smoke:  {title:'喫煙ルール', ico:'🚬', unk:'喫煙：未登録',   all:'🚬 喫煙：指定なし',   opts:{no:'🚭 禁煙',sep:'分煙（喫煙席あり）',yes:'🚬 喫煙可'}},
+  smokeKind:{title:'喫煙の種類（分煙・喫煙可の場合）', ico:'💨', unk:'種類：未登録', all:'💨 種類：指定なし', opts:{e:'💨 電子たばこのみ',paper:'🚬 紙たばこOK'},
+             when: sp => sp.smoke==='sep' || sp.smoke==='yes'},
   parking:{title:'駐車場',     ico:'🅿️', unk:'駐車場：未登録', all:'🅿️ 駐車場：指定なし', opts:{own:'🅿️ 駐車場あり',partner:'🤝 提携駐車場',none:'🚫 駐車場なし'}}
 };
 const ATTR_KEYS = Object.keys(ATTRS);
 const attrLabel = (k,v) => ATTRS[k].opts[v] || ATTRS[k].unk;
+const KIND_SHORT = {e:'電子のみ',paper:'紙OK'};
+function smokeText(sp){   // 例：「分煙・電子のみ」「🚬 喫煙可・紙OK」
+  if(!sp.smoke) return ATTRS.smoke.unk;
+  const base=ATTRS.smoke.opts[sp.smoke].replace('（喫煙席あり）','');
+  return sp.smoke!=='no' && sp.smokeKind ? `${base}・${KIND_SHORT[sp.smokeKind]}` : base;
+}
+function attrActive(sp,k,forAsk){   // 喫煙の種類は、分煙・喫煙可のお店だけ
+  const w=ATTRS[k].when; if(!w) return true;
+  if(w(sp)) return true;
+  return !!forAsk && ((sp.av&&sp.av.smoke&&sp.av.smoke.votes)||[]).some(v=>v.user===S.me && (v.v==='sep'||v.v==='yes'));
+}
+function fixSmoke(sp){   // 旧データの「電子のみ」を、新しい2段階の分類に直す
+  if(sp.smoke==='e'){ sp.smoke='yes'; sp.smokeKind='e'; }
+  if(sp.av && sp.av.smoke) sp.av.smoke.votes.forEach(x=>{ if(x.v==='e') x.v='yes'; });
+  if((sp.smoke==='sep'||sp.smoke==='yes') && sp.smokeKind===undefined && sp.demo){
+    sp.smokeKind=((sp.id.length+sp.id.charCodeAt(sp.id.length-1))%2)?'e':'paper';
+  }
+  if(sp.smoke==='no') sp.smokeKind=null;
+}
 const MAX_TAGS = 6;                              // 1つのスポットに付けられるタグの数
 const KEY = 'rupo-proto-v1';
 
@@ -353,6 +374,7 @@ const WARDS = [
   }));
 })();
 Object.values(S.spots).forEach(normSpot);
+Object.values(S.spots).forEach(fixSmoke);
 if(!S.filter) S.filter={main:'eat',sub:null};   // 基本は、ひとつのジャンルだけに絞り込む
 const flt = () => S.filter;
 function mainsOf(sp){   // メインタグ：みんなが決めた1つ＋オーナーが広げた分
@@ -528,7 +550,11 @@ map.on('moveend',onMove);
 
 /* ジャンルの絞り込み（メインタグ → サブタグ） */
 function renderAttrBtns(){
-  ATTR_KEYS.forEach(k=>{ const b=document.querySelector(`#wards [data-attr="${k}"]`); if(!b) return; const v=flt()[k]; b.textContent=v?ATTRS[k].opts[v]:ATTRS[k].all; b.classList.toggle('on',!!v); });
+  ATTR_KEYS.forEach(k=>{
+    const b=document.querySelector(`#wards [data-attr="${k}"]`); if(!b) return; const v=flt()[k];
+    b.textContent=v?ATTRS[k].opts[v]:ATTRS[k].all; b.classList.toggle('on',!!v);
+    b.style.display=(k==='smokeKind' && flt().smoke!=='sep' && flt().smoke!=='yes')?'none':'';
+  });
 }
 function renderFilter(){
   const f=flt(); renderAttrBtns();
@@ -559,7 +585,9 @@ $('#subs').onclick=e=>{
     const b=e.target.closest('button'); if(!b) return;
     if(b.dataset.attr){
       const k=b.dataset.attr, order=[null].concat(Object.keys(ATTRS[k].opts)), i=order.indexOf(S.filter[k]||null);
-      S.filter[k]=order[(i+1)%order.length]; save(); applyFilter(); return;
+      S.filter[k]=order[(i+1)%order.length];
+      if(k==='smoke' && S.filter.smoke!=='sep' && S.filter.smoke!=='yes') S.filter.smokeKind=null;   // 種類は、分煙・喫煙可のときだけ
+      save(); applyFilter(); return;
     }
     el.querySelectorAll('button:not([data-attr])').forEach(x=>x.classList.toggle('on',x===b));
     closeSheet();
@@ -612,7 +640,7 @@ function refreshSheet(){
   <div class="sp-head"><div class="sp-ico" style="--c:${c.c}33">${c.e}</div>
     <div><div class="sp-name">${esc(sp.name)}</div>
     <div class="sp-meta">${c.l} ・ あなたから ${fmtD(d)}${real?` ・ 作成者 ${esc(sp.creator)}`:''}</div>
-    <div class="sp-tags">${(sp.subs||[]).map(x=>`<span class="${mainsOf(sp).includes(x)?'m':''}">${esc(x)}</span>`).join('')}${ATTR_KEYS.map(k=>`<span class="sm">${esc(attrLabel(k,sp[k]))}</span>`).join('')}</div></div>
+    <div class="sp-tags">${(sp.subs||[]).map(x=>`<span class="${mainsOf(sp).includes(x)?'m':''}">${esc(x)}</span>`).join('')}${[smokeText(sp),attrLabel('parking',sp.parking)].map(t=>`<span class="sm">${esc(t)}</span>`).join('')}</div></div>
     <button class="x" id="sh-x">✕</button></div>
   <div class="stats"><div class="stat"><b>${views}</b>閲覧</div><div class="stat"><b>${checkins}</b>到着</div><div class="stat"><b>${rpn}</b>ルポ</div></div>`;
   if(!real){
@@ -621,7 +649,7 @@ function refreshSheet(){
   }else{
     h+=`<div class="main-info"><span class="tag">✨ メイン情報</span>${mi?reportCard(mi).replace('class="rp"','class="rp" style="border:0;background:none;padding:6px 0 0;margin:0"'):'<div class="empty">まだルポがありません</div>'}</div>
     <div class="row"><button class="btn pri" id="sh-arr">🚶 到着した</button><button class="btn" id="sh-rp">✍️ ルポる</button><button class="btn" id="sh-nav">🧭 経路</button></div>
-    ${tagBlock(sp)}${ownerBlock(sp)}${ATTR_KEYS.map(k=>attrBlock(sp,k)).join('')}${posBlock(sp)}`;
+    ${tagBlock(sp)}${ownerBlock(sp)}${ATTR_KEYS.filter(k=>attrActive(sp,k)).map(k=>attrBlock(sp,k)).join('')}${posBlock(sp)}`;
     const rest=sp.reports.slice().sort((a,b)=>b.t-a.t);
     h+=`<h3>みんなのルポ（${rest.length}）</h3>`+rest.map(r=>reportCard(r)).join('');
   }
@@ -680,6 +708,11 @@ function resizePhoto(file){
     fr.onerror=()=>res(null); fr.readAsDataURL(file);
   });
 }
+function readAttrs(){
+  const o={}; ATTR_KEYS.forEach(k=>{ const e=$('#rp-'+k); o[k]=e&&e.value?e.value:null; });
+  if(o.smoke!=='sep' && o.smoke!=='yes') o.smokeKind=null;
+  return o;
+}
 function openReport(id,loc){
   const isNew = id==null;
   const sp = isNew ? null : spotData(id);
@@ -728,10 +761,10 @@ function openReport(id,loc){
       const nm=$('#rp-name').value.trim();
       if(!nm){ toast('スポット名を入れてください'); return; }
       spotId=rid('u'); created=true;
-      S.spots[spotId]={id:spotId,name:nm,lat:loc.lat,lng:loc.lng,cat:mainSel,subs:subSel,smoke:($('#rp-smoke').value||null),parking:($('#rp-parking').value||null),creator:S.me,views:0,checkins:0,reports:[]};
+      S.spots[spotId]={id:spotId,name:nm,lat:loc.lat,lng:loc.lng,cat:mainSel,subs:subSel,...readAttrs(),creator:S.me,views:0,checkins:0,reports:[]};
     }else if(!isReal(id)){
       const c=cands.get(id);
-      S.spots[id]={id,name:c.name,lat:c.lat,lng:c.lng,cat:mainSel,subs:subSel,smoke:($('#rp-smoke').value||null),parking:($('#rp-parking').value||null),creator:S.me,views:0,checkins:0,reports:[],osm:true};
+      S.spots[id]={id,name:c.name,lat:c.lat,lng:c.lng,cat:mainSel,subs:subSel,...readAttrs(),creator:S.me,views:0,checkins:0,reports:[],osm:true};
       created=true; popId=id;
     }
     S.spots[spotId].reports.push({id:rid('r'),user:S.me,text,tag,t:Date.now(),likes:0,photo});
@@ -990,7 +1023,7 @@ function demoAttrVote(id,k,v){
 }
 function maybeAskAttr(id,from){
   const sp=S.spots[id]; if(!sp) return;
-  for(let i=from||0;i<ATTR_KEYS.length;i++){ if(canVoteAttr(sp,ATTR_KEYS[i])){ const k=ATTR_KEYS[i]; setTimeout(()=>askAttr(id,k),350); return; } }
+  for(let i=from||0;i<ATTR_KEYS.length;i++){ if(attrActive(sp,ATTR_KEYS[i],true) && canVoteAttr(sp,ATTR_KEYS[i])){ const k=ATTR_KEYS[i]; setTimeout(()=>askAttr(id,k),350); return; } }
 }
 function askAttr(id,k){
   const sp=S.spots[id]; if(!sp) return; const A=ATTRS[k], next=ATTR_KEYS.indexOf(k)+1;
@@ -1091,7 +1124,7 @@ function renderMe(){
       <table id="sim-t"></table>
       <div class="note" style="margin-top:6px">※ 金額は仮の計算です。実際の支払いは、法務・税務を確認してから始めます。</div></div>
     <div class="card"><h4>🧪 試作用の設定</h4><label class="sw"><span>場所の制限なしで、最初のルポを書ける<br><span class="note">本番では、この1週間に訪れた場所の近く（150m以内）に、あとからでも作れます。</span></span><input type="checkbox" id="demo-sw" ${demoOn()?'checked':''}></label></div>
-    <div class="card"><h4>しくみ</h4><div class="note">・喫煙ルール（禁煙／電子たばこのみ／分煙／喫煙可）と駐車場（あり／提携／なし）は、到着した人の回答で決まる。地図のボタンで絞り込める<br>・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・お店のいちばんの顔（メインタグ）は、到着した人の回答で決まる。飲食店のオーナーは、メインタグを最大3つまで広げられる<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
+    <div class="card"><h4>しくみ</h4><div class="note">・喫煙ルール（禁煙／分煙／喫煙可。分煙・喫煙可は、電子のみ／紙OKも）と駐車場（あり／提携／なし）は、到着した人の回答で決まる。地図のボタンで絞り込める<br>・スポットには、メインタグ（ジャンル）がひとつと、サブタグが複数ある。地図は、選んだジャンルだけを表示する<br>・お店のいちばんの顔（メインタグ）は、到着した人の回答で決まる。飲食店のオーナーは、メインタグを最大3つまで広げられる<br>・同じスポットの到着は月1回までカウント<br>・到着後、決め手になったルポに「決めた！」を1つ贈る<br>・「決めた！」を受け取ったルポ主のコンフィが上がる<br>・メイン情報は「決めた！」数 × 書いた人のコンフィで自動決定<br>・ピンの位置は誰でも提案でき、30m以上ずれていたら到着した人が「どちらが正確？」に答えて、多いほうを採用</div></div>
     <button class="link" id="reset">🧪 デモデータを最初に戻す</button>`;
   el.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{
     const [rid_,sid]=b.dataset.demo.split('|'), r=S.spots[sid].reports.find(x=>x.id===rid_);
