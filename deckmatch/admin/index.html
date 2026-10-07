@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>デックマッチ管理画面</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 上に見出しとタブ、下にタブごとの中身。管理する人だけが Google でログインして使う */
+:root {
+  --bg: #f3f1ec; --panel: #fffdf8; --ink: #23201b; --sub: #6b655a; --line: #dcd6ca;
+  --accent: #d2562b; --accent-soft: #fbe3d8; --ok: #2f8a4c; --ok-soft: #dcf0e2; --warn: #b8770f; --warn-soft: #fbedd2;
+  --chip: #ebe7df; --shade: rgba(20,16,10,.45);
+  --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #1b1916; --panel: #25221e; --ink: #f1ece2; --sub: #aaa293; --line: #3a362f;
+  --accent: #f07a4c; --accent-soft: #4a2a1d; --ok: #6fcf8e; --ok-soft: #1f3a28; --warn: #f0b14e; --warn-soft: #43331a;
+  --chip: #302c26; --shade: rgba(0,0,0,.6); color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.6; padding-inline: 16px; padding-block: 0 48px }
+[hidden] { display: none !important }
+h1 { font-family: var(--display); font-weight: 400; font-size: 22px; margin: 0; letter-spacing: .02em }
+h2 { font-family: var(--display); font-weight: 400; font-size: 18px; margin: 0 }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 18px 8px; max-width: 1200px; margin-inline: auto }
+.who { margin-left: auto; display: flex; gap: 8px; align-items: center; color: var(--sub); font-size: 13px }
+.tabs { display: flex; gap: 6px; max-width: 1200px; margin-inline: auto; border-bottom: 1px solid var(--line) }
+.tab { font: inherit; font-weight: 700; border: 0; background: none; color: var(--sub); padding: 8px 14px; cursor: pointer; border-bottom: 3px solid transparent }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent) }
+.page { max-width: 1200px; margin-inline: auto; padding-block: 14px }
+.gate { max-width: 460px; margin: 60px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; display: flex; flex-direction: column; gap: 12px }
+.btn { font: inherit; font-weight: 700; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; background: var(--chip); color: var(--ink) }
+.btn.main { background: var(--accent); color: #fff }
+.btn.small { padding: 4px 10px; font-size: 12px }
+.btn:disabled { opacity: .5; cursor: default }
+.btn:focus-visible, .chip:focus-visible, .tab:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+input[type=search], input[type=text], input[type=number], input[type=datetime-local], textarea, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0 }
+.note { background: var(--warn-soft); border-radius: 6px; padding: 8px 12px; font-size: 13px }
+.msg { font-size: 13px; color: var(--sub) }
+.err { color: var(--accent); font-weight: 700 }
+.okmsg { color: var(--ok); font-weight: 700 }
+
+/* メール */
+.mailgrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 18px; align-items: start }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+.fld { display: flex; flex-direction: column; gap: 4px }
+.fld label, .lab { font-size: 12px; color: var(--sub); font-weight: 700 }
+.fld textarea { min-height: 6em; resize: vertical; line-height: 1.5 }
+.gifts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.preview { border: 2px solid var(--ink); border-radius: 8px; background: var(--bg); padding: 12px }
+.preview .t { font-weight: 700; font-size: 15px }
+.preview .b p { margin: 4px 0 }
+.preview .g { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.pill { background: var(--chip); border-radius: 999px; padding: 1px 10px; font-size: 12px; font-variant-numeric: tabular-nums }
+.list { display: flex; flex-direction: column; gap: 8px }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px }
+.item .top { display: flex; gap: 8px; align-items: center }
+.item .top b { flex: 1; min-width: 0 }
+.item .meta { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums }
+
+/* タイル */
+.bar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-block: 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px }
+.bar .row .lab { min-width: 4.5em }
+.bar input[type=search] { flex: 1 1 220px }
+.chip { font: inherit; font-size: 13px; border: 1px solid transparent; background: var(--chip); color: var(--ink); padding: 3px 10px; border-radius: 999px; cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg) }
+.stats { color: var(--sub); font-variant-numeric: tabular-nums }
+.stats b { color: var(--ink) }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; padding-block: 14px }
+.card { position: relative; display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; cursor: pointer }
+.card:hover { border-color: var(--sub) }
+.art { position: relative; border-radius: 6px; padding: 3px; background: linear-gradient(135deg, var(--r1), var(--r2), var(--r3), var(--r4), var(--r5, var(--r4))) }
+.art img { display: block; width: 100%; aspect-ratio: 1; border-radius: 4px; background: #0002 }
+.cost { position: absolute; left: 6px; top: 6px; min-width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #1d1a16e6; color: #fff; font-family: var(--display); font-size: 14px }
+.star { position: absolute; right: 6px; top: 6px; background: #1d1a16e6; color: #ffd76a; font-size: 11px; padding: 1px 6px; border-radius: 999px }
+.nm { font-weight: 700; font-size: 15px; line-height: 1.3 }
+.sh { color: var(--sub); font-size: 12px; line-height: 1.45 }
+.tags { display: flex; flex-wrap: wrap; gap: 4px }
+.tag { font-size: 11px; background: var(--chip); padding: 0 6px; border-radius: 4px; color: var(--sub) }
+.flag { position: absolute; right: -6px; top: -6px; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; color: #fff }
+.flag.ch { background: var(--accent) }
+.flag.ok { background: var(--ok) }
+.empty { color: var(--sub); padding: 40px 0; text-align: center }
+
+/* 窓 */
+.shade { position: fixed; inset: 0; background: var(--shade); z-index: 20 }
+.sheet { position: fixed; z-index: 21; background: var(--panel); top: 0; right: 0; bottom: 0; width: min(560px, 100%); overflow-y: auto; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: -6px 0 24px #0003 }
+.sheet .top { display: grid; grid-template-columns: 112px 1fr; gap: 14px; align-items: start }
+.sheet .top > div { min-width: 0 }
+.fld .was { font-size: 12px; color: var(--sub) }
+.fld.changed input, .fld.changed textarea, .fld.changed select { border-color: var(--accent); background: var(--accent-soft) }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: -24px; background: var(--panel); padding-block: 10px; border-top: 1px solid var(--line) }
+.chk { display: flex; gap: 6px; align-items: center; font-weight: 700 }
+.info { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--sub) }
+.confirm { position: fixed; z-index: 31; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px)); background: var(--panel); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 40px #0005 }
+.confirm-shade { position: fixed; inset: 0; background: var(--shade); z-index: 30 }
+
+@media (max-width: 760px) { .mailgrid { grid-template-columns: 1fr } }
+@media (max-width: 520px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px }
+  .sheet { top: 8%; width: 100%; border-radius: 14px 14px 0 0 }
+  .sheet .top { grid-template-columns: 84px 1fr }
+  .two { grid-template-columns: 1fr }
+}
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>デックマッチ管理画面</h1>
+  <div class="who" id="who"></div>
+</div>
+
+<div class="gate" id="gate">
+  <h2>ログイン</h2>
+  <p class="msg" id="gateMsg">読み込み中…</p>
+  <button class="btn main" id="loginBtn" hidden>Google でログイン</button>
+</div>
+
+<div id="app" hidden>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="mail" aria-selected="true">メール</button>
+    <button class="tab" role="tab" data-tab="tiles" aria-selected="false">タイル見直し</button>
+  </div>
+
+  <!-- メール -->
+  <section class="page" id="tab-mail">
+    <div class="mailgrid">
+      <div class="box">
+        <h2>メールを出す</h2>
+        <div class="fld">
+          <span class="lab">あて先</span>
+          <div class="row">
+            <label class="chk"><input type="radio" name="to" value="all" id="toAll" checked> 全員</label>
+            <label class="chk"><input type="radio" name="to" value="one" id="toOne"> 1人だけ</label>
+            <input type="text" id="toCode" placeholder="フレンドコード（8 文字）" maxlength="8" hidden>
+            <span class="msg" id="toName"></span>
+          </div>
+        </div>
+        <div class="fld"><label for="mTitle">見出し（40 文字まで）</label><input type="text" id="mTitle" maxlength="40" placeholder="例：不具合のおわび"></div>
+        <div class="fld"><label for="mText">本文（改行で段落が分かれます）</label><textarea id="mText" placeholder="例：一部の画面で表示が乱れる不具合がありました。&#10;おわびとして、ジェムをお届けします。"></textarea></div>
+        <div class="fld">
+          <span class="lab">配る物（配らないものは空のまま）</span>
+          <div class="gifts">
+            <label class="fld"><span class="lab">ジェム</span><input type="number" min="0" max="100000" id="g_gems"></label>
+            <label class="fld"><span class="lab">コイン</span><input type="number" min="0" max="10000000" id="g_coins"></label>
+            <label class="fld"><span class="lab">回復薬（小）</span><input type="number" min="0" max="1000" id="g_potionSmall"></label>
+            <label class="fld"><span class="lab">回復薬（中）</span><input type="number" min="0" max="1000" id="g_potionMid"></label>
+            <label class="fld"><span class="lab">回復薬（大）</span><input type="number" min="0" max="1000" id="g_potionLarge"></label>
+            <label class="fld"><span class="lab">タイルガチャ券</span><input type="number" min="0" max="100" id="g_tileTickets"></label>
+            <label class="fld"><span class="lab">スキンガチャ券</span><input type="number" min="0" max="100" id="g_skinTickets"></label>
+          </div>
+        </div>
+        <div class="two">
+          <div class="fld"><label for="mFrom">出し始め（空ならすぐ）</label><input type="datetime-local" id="mFrom"></div>
+          <div class="fld"><label for="mUntil">出し終わり（空ならずっと）</label><input type="datetime-local" id="mUntil"></div>
+        </div>
+        <div class="fld">
+          <span class="lab">見え方</span>
+          <div class="preview" id="preview"></div>
+        </div>
+        <div class="row">
+          <button class="btn main" id="sendBtn">送る</button>
+          <span class="msg" id="sendMsg"></span>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="row"><h2 style="flex:1">全員へのメール</h2><button class="btn small" id="reloadAll">読み直す</button></div>
+        <div class="list" id="allList"><p class="msg">読み込み中…</p></div>
+        <div class="row"><h2 style="flex:1">1人へのメールを見る</h2></div>
+        <div class="row"><input type="text" id="lookCode" placeholder="フレンドコード（8 文字）" maxlength="8"><button class="btn small" id="lookBtn">見る</button><span class="msg" id="lookName"></span></div>
+        <div class="list" id="oneList"></div>
+        <p class="msg">取り消すと、まだ受け取っていない人のメールBOXには入らなくなります。もう受け取った人の配る物は戻りません。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- タイル見直し -->
+  <section class="page" id="tab-tiles" hidden>
+    <div class="stats" id="stats">読み込み中…</div>
+    <div class="bar">
+      <div class="row"><input type="search" id="q" placeholder="名前・説明で探す"></div>
+      <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
+      <div class="row"><span class="lab">種類</span><span id="fCat" class="row"></span></div>
+      <div class="row"><span class="lab">使いどころ</span><span id="fScope" class="row"></span></div>
+      <div class="row"><span class="lab">状態</span><span id="fState" class="row"></span>
+        <span class="lab" style="margin-left:auto">並び</span>
+        <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option></select></div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" hidden>当てはまるタイルがありません</div>
+  </section>
+</div>
+<div id="layer"></div>
+
+<script src="fb.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const FB = window.FB;
+const ADMINS = ['nemoto.rmk@gmail.com'];
+let started = false;
+
+/* ---------- ログイン ---------- */
+$('loginBtn').onclick = () => FB.signIn().catch((e) => { $('gateMsg').innerHTML = `<span class="err">ログインできませんでした（${esc(e.code || e.message)}）</span>`; });
+FB.onUser((u) => {
+  if (!u) {
+    $('app').hidden = true; $('gate').hidden = false; $('loginBtn').hidden = false; $('who').innerHTML = '';
+    $('gateMsg').textContent = '管理する人の Google アカウントでログインしてください。';
+    return;
+  }
+  $('who').innerHTML = `<span>${esc(u.email)}</span><button class="btn small" id="outBtn">ログアウト</button>`;
+  $('outBtn').onclick = () => FB.signOut();
+  if (!ADMINS.includes(u.email) || !u.emailVerified) {
+    $('app').hidden = true; $('gate').hidden = false; $('loginBtn').hidden = true;
+    $('gateMsg').innerHTML = '<span class="err">このアカウントでは使えません。</span>管理する人のアカウントでログインし直してください。';
+    return;
+  }
+  $('gate').hidden = true; $('app').hidden = false;
+  if (!started) { started = true; startMail(); startTiles(); }
+});
+
+/* ---------- タブ ---------- */
+document.querySelectorAll('.tab').forEach((t) => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+  $('tab-mail').hidden = t.dataset.tab !== 'mail';
+  $('tab-tiles').hidden = t.dataset.tab !== 'tiles';
+});
+
+/* ---------- 確認の窓 ---------- */
+function ask(title, lines, okLabel) {
+  return new Promise((resolve) => {
+    const shade = document.createElement('div'); shade.className = 'confirm-shade';
+    const box = document.createElement('div'); box.className = 'confirm'; box.setAttribute('role', 'dialog');
+    box.innerHTML = `<h2>${esc(title)}</h2>${lines.map((l) => `<p class="msg" style="margin:0">${esc(l)}</p>`).join('')}<div class="row" style="justify-content:flex-end"><button class="btn" data-a="no">やめる</button><button class="btn main" data-a="yes">${esc(okLabel)}</button></div>`;
+    const done = (v) => { shade.remove(); box.remove(); resolve(v); };
+    shade.onclick = () => done(false);
+    box.querySelector('[data-a=no]').onclick = () => done(false);
+    box.querySelector('[data-a=yes]').onclick = () => done(true);
+    document.body.append(shade, box);
+    box.querySelector('[data-a=yes]').focus();
+  });
+}
+
+/* ---------- メール ---------- */
+const GIFTS = [['gems', 'ジェム'], ['coins', 'コイン'], ['potionSmall', '回復薬（小）'], ['potionMid', '回復薬（中）'], ['potionLarge', '回復薬（大）'], ['tileTickets', 'タイルガチャ券'], ['skinTickets', 'スキンガチャ券']];
+const fmt = (ms) => { if (typeof ms !== 'number') return ''; const d = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const giftPills = (d) => GIFTS.filter(([k]) => d[k]).map(([k, l]) => `<span class="pill">${l} ×${Number(d[k]).toLocaleString()}</span>`).join('');
+let target = null; // { uid, name, code }
+
+function readForm() {
+  const d = { title: $('mTitle').value.trim(), text: $('mText').value.replace(/\r/g, '').trim() };
+  for (const [k] of GIFTS) { const v = $('g_' + k).value.trim(); if (v !== '') d[k] = Number(v); }
+  const from = $('mFrom').value, until = $('mUntil').value;
+  if (from) d.from = new Date(from).getTime();
+  if (until) d.until = new Date(until).getTime();
+  return d;
+}
+function problems(d) {
+  const p = [];
+  if (!d.title) p.push('見出しを入れてください');
+  for (const [k, l] of GIFTS) if (d[k] !== undefined && (!Number.isInteger(d[k]) || d[k] <= 0)) p.push(`${l}は 1 以上の整数にしてください（配らないなら空に）`);
+  if (d.from && d.until && d.until <= d.from) p.push('出し終わりは、出し始めより後にしてください');
+  if ($('toOne').checked && !target) p.push('あて先のフレンドコードを入れてください');
+  return p;
+}
+function renderPreview() {
+  const d = readForm();
+  const kind = GIFTS.some(([k]) => d[k]) ? '配る物つき（メールBOXで受け取る）' : 'お知らせ（読むだけ）';
+  $('preview').innerHTML = `<div class="t">${esc(d.title || '（見出し）')}</div><div class="b">${(d.text || '').split('\n').filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="msg">（本文なし）</p>'}</div><div class="g">${giftPills(d)}</div><p class="msg" style="margin:8px 0 0">${kind}${d.from ? '・' + fmt(d.from) + ' から' : ''}${d.until ? '・' + fmt(d.until) + ' まで' : ''}</p>`;
+}
+async function findCode(code) {
+  code = code.trim().toUpperCase();
+  if (!/^[A-Z0-9]{8}$/.test(code)) return null;
+  const c = await FB.getDoc(FB.doc(FB.db, 'codes', code));
+  if (!c.exists()) return null;
+  const uid = c.data().uid;
+  const u = await FB.getDoc(FB.doc(FB.db, 'users', uid));
+  return { uid, code, name: (u.exists() && u.data().name) || '（名前なし）' };
+}
+function itemHtml(id, d) {
+  return `<div class="item"><div class="top"><b>${esc(d.title)}</b><button class="btn small" data-del="${esc(id)}">取り消す</button></div>
+    <div class="meta">${fmt(d.at)} に出した${d.from ? '・' + fmt(d.from) + ' から' : ''}${d.until ? '・' + fmt(d.until) + ' まで' : ''}</div>
+    ${d.text ? `<div class="msg">${esc(d.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="row">${giftPills(d) || '<span class="pill">お知らせ</span>'}</div></div>`;
+}
+async function loadList(path, host, who) {
+  host.innerHTML = '<p class="msg">読み込み中…</p>';
+  try {
+    const snap = await FB.getDocs(FB.query(FB.collection(FB.db, ...path), FB.orderBy('at', 'desc')));
+    host.innerHTML = snap.empty ? '<p class="msg">まだありません</p>' : snap.docs.map((x) => itemHtml(x.id, x.data())).join('');
+    host.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+      const id = b.dataset.del, d = snap.docs.find((x) => x.id === id).data();
+      if (!(await ask('メールを取り消しますか', [`「${d.title}」（${who}）`, 'まだ受け取っていない人には届かなくなります。もう受け取った人の配る物は戻りません。'], '取り消す'))) return;
+      try { await FB.deleteDoc(FB.doc(FB.db, ...path, id)); loadList(path, host, who); }
+      catch (e) { alert(e.message); }
+    });
+  } catch (e) { host.innerHTML = `<p class="err">読み込めませんでした（${esc(e.code || e.message)}）</p>`; }
+}
+function startMail() {
+  ['mTitle', 'mText', 'mFrom', 'mUntil', ...GIFTS.map(([k]) => 'g_' + k)].forEach((id) => $(id).addEventListener('input', renderPreview));
+  renderPreview();
+  const syncTo = () => { $('toCode').hidden = !$('toOne').checked; if (!$('toOne').checked) { target = null; $('toName').textContent = ''; } };
+  $('toAll').onchange = syncTo; $('toOne').onchange = syncTo;
+  $('toCode').addEventListener('input', async () => {
+    target = null; const v = $('toCode').value;
+    if (v.trim().length < 8) { $('toName').textContent = ''; return; }
+    $('toName').textContent = '探しています…';
+    try { target = await findCode(v); $('toName').innerHTML = target ? `あて先：<b>${esc(target.name)}</b>` : '<span class="err">見つかりません</span>'; }
+    catch (e) { $('toName').innerHTML = `<span class="err">${esc(e.code || e.message)}</span>`; }
+  });
+  $('sendBtn').onclick = async () => {
+    const d = readForm(); const p = problems(d);
+    if (p.length) { $('sendMsg').innerHTML = `<span class="err">${p.map(esc).join('<br>')}</span>`; return; }
+    if (!d.text) delete d.text;
+    const who = target ? `${target.name}（${target.code}）だけ` : '全員';
+    const gifts = GIFTS.filter(([k]) => d[k]).map(([k, l]) => `${l} ×${d[k].toLocaleString()}`).join('、');
+    if (!(await ask(`${who}に送りますか`, [`見出し：${d.title}`, gifts ? `配る物：${gifts}` : '配る物なし（お知らせ）', '送った内容は書き換えられません（取り消して出し直します）'], '送る'))) return;
+    $('sendBtn').disabled = true; $('sendMsg').textContent = '送っています…';
+    try {
+      const path = target ? ['users', target.uid, 'mailbox'] : ['mailbox'];
+      await FB.addDoc(FB.collection(FB.db, ...path), { ...d, at: Date.now() });
+      $('sendMsg').innerHTML = `<span class="okmsg">${esc(who)}に送りました</span>`;
+      ['mTitle', 'mText', 'mFrom', 'mUntil', ...GIFTS.map(([k]) => 'g_' + k)].forEach((id) => { $(id).value = ''; });
+      renderPreview();
+      if (target) { $('lookCode').value = target.code; showOne(target); } else loadAll();
+    } catch (e) { $('sendMsg').innerHTML = `<span class="err">送れませんでした（${esc(e.code || e.message)}）</span>`; }
+    $('sendBtn').disabled = false;
+  };
+  const loadAll = () => loadList(['mailbox'], $('allList'), '全員');
+  const showOne = (t) => { $('lookName').innerHTML = `<b>${esc(t.name)}</b>`; loadList(['users', t.uid, 'mailbox'], $('oneList'), t.name); };
+  $('reloadAll').onclick = loadAll;
+  $('lookBtn').onclick = async () => {
+    $('oneList').innerHTML = ''; $('lookName').textContent = '探しています…';
+    const t = await findCode($('lookCode').value).catch(() => null);
+    if (!t) { $('lookName').innerHTML = '<span class="err">見つかりません</span>'; return; }
+    showOne(t);
+  };
+  loadAll();
+}
+
+/* ---------- タイル見直し ---------- */
+const CAT = { attack: '攻め', defense: '守り', self: '整え', disrupt: '妨害', resource: '補給' };
+const CAT_ORDER = Object.keys(CAT);
+const SCOPE = { common: '共通', stage: 'ステージ', versus: '対戦' };
+const RIM = { 1: ['#e9e6df', '#c9c4ba', '#e2ded6', '#bdb8ad'], 2: ['#f4fbff', '#a9d8ec', '#e6f6fd', '#8fc6de'], 3: ['#f4f6f9', '#6f7b8c', '#dfe5ec', '#5d6878'], 4: ['#fff0bf', '#b88a3a', '#f1d58f', '#94691f'], 5: ['#ff9ecf', '#ffe08a', '#9ff2c8', '#8fd0ff', '#c7a4ff'] };
+const FIELDS = ['name', 'short', 'text', 'stageText', 'star', 'cost'];
+let tiles = [], edits = {}, open = null;
+const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), state: 'all', sort: 'star' };
+const urls = new Map();
+const artUrl = (t) => { if (!urls.has(t.id)) urls.set(t.id, URL.createObjectURL(new Blob([t.svg], { type: 'image/svg+xml' }))); return urls.get(t.id); };
+const val = (t, k) => { const e = edits[t.id]; return e && e[k] !== undefined ? e[k] : t[k]; };
+const changedKeys = (t) => { const e = edits[t.id]; return e ? FIELDS.filter((k) => e[k] !== undefined && e[k] !== t[k]) : []; };
+const rimVars = (s) => RIM[s].map((c, i) => `--r${i + 1}:${c}`).join(';');
+const stars = (n) => '★'.repeat(n);
+const marks = (t) => [t.solo && '単独', t.when === 'mine' && '自分の番だけ', t.when === 'theirs' && '相手の番だけ', t.quiet && '静か'].filter(Boolean);
+
+function chips(host, items, set, key) {
+  host.innerHTML = '';
+  for (const [v, label] of items) {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = label;
+    b._sync = () => b.setAttribute('aria-pressed', key ? String(f[key] === v) : String(set.has(v)));
+    b.onclick = () => { if (key) f[key] = v; else set.has(v) ? set.delete(v) : set.add(v); [...host.children].forEach((c) => c._sync()); render(); };
+    b._sync(); host.appendChild(b);
+  }
+}
+function render() {
+  const q = f.q.trim();
+  const list = tiles.filter((t) => {
+    const e = edits[t.id] || {};
+    if (f.star.size && !f.star.has(Number(val(t, 'star')))) return false;
+    if (f.cat.size && !f.cat.has(t.category)) return false;
+    if (f.scope.size && !f.scope.has(t.scope)) return false;
+    if (f.state === 'changed' && !changedKeys(t).length) return false;
+    if (f.state === 'memo' && !e.note) return false;
+    if (f.state === 'done' && !e.done) return false;
+    if (f.state === 'todo' && e.done) return false;
+    if (q && ![val(t, 'name'), val(t, 'short'), val(t, 'text'), val(t, 'stageText'), t.name, e.note].join(' ').includes(q)) return false;
+    return true;
+  }).sort({
+    star: (a, b) => val(a, 'star') - val(b, 'star') || val(a, 'cost') - val(b, 'cost'),
+    cost: (a, b) => val(a, 'cost') - val(b, 'cost') || val(a, 'star') - val(b, 'star'),
+    cat: (a, b) => CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category) || val(a, 'star') - val(b, 'star'),
+    name: (a, b) => String(val(a, 'name')).localeCompare(String(val(b, 'name')), 'ja'),
+  }[f.sort]);
+  $('grid').innerHTML = list.map((t) => {
+    const e = edits[t.id] || {}, s = Number(val(t, 'star'));
+    const flag = changedKeys(t).length ? '<span class="flag ch">変更あり</span>' : e.done ? '<span class="flag ok">確認済み</span>' : '';
+    return `<button class="card" data-id="${esc(t.id)}">${flag}
+      <div class="art" style="${rimVars(s)}"><img alt="" loading="lazy" src="${artUrl(t)}"><span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
+      <div class="nm">${esc(val(t, 'name'))}</div><div class="sh">${esc(val(t, 'short'))}</div>
+      <div class="tags"><span class="tag">${CAT[t.category]}</span><span class="tag">${SCOPE[t.scope]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
+  }).join('');
+  $('empty').hidden = list.length > 0;
+  $('stats').innerHTML = `全 <b>${tiles.length}</b> 枚 ・ 表示 <b>${list.length}</b> ・ 変更あり <b>${tiles.filter((t) => changedKeys(t).length).length}</b> ・ 確認済み <b>${tiles.filter((t) => edits[t.id]?.done).length}</b>`;
+}
+$('grid').addEventListener('click', (ev) => { const c = ev.target.closest('.card'); if (c) openSheet(c.dataset.id); });
+const readField = (k, raw) => (k === 'star' || k === 'cost') ? Number(raw) : raw;
+function openSheet(id) {
+  const t = tiles.find((x) => x.id === id); if (!t) return;
+  open = id; const e = edits[id] || {};
+  const fld = (k, label, kind) => {
+    const v = val(t, k), orig = t[k];
+    const input = kind === 'area' ? `<textarea id="e_${k}" rows="3">${esc(v)}</textarea>`
+      : kind === 'star' ? `<select id="e_${k}">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n == v ? ' selected' : ''}>${stars(n)}（${n}）</option>`).join('')}</select>`
+      : kind === 'num' ? `<input type="number" id="e_${k}" min="0" max="20" value="${esc(v)}">`
+      : `<input type="text" id="e_${k}" value="${esc(v)}">`;
+    return `<div class="fld"><label for="e_${k}">${label}</label>${input}<div class="was">いまのゲーム：${esc(kind === 'star' ? stars(orig) : (orig === '' ? '（なし）' : orig))}</div></div>`;
+  };
+  $('layer').innerHTML = `<div class="shade" id="shade"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="top"><div class="art" style="${rimVars(t.star)}"><img alt="" src="${artUrl(t)}"></div>
+      <div><h2>${esc(t.name)}</h2><div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>デッキに入る枚数：${t.maxCopies}</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
+    ${fld('name', '名前')}
+    <div class="two">${fld('star', 'レアリティ', 'star')}${fld('cost', 'コスト', 'num')}</div>
+    ${fld('short', '札の短い説明', 'area')}${fld('text', '効果（全文・対戦）', 'area')}${fld('stageText', '効果（ステージ用の文）', 'area')}
+    <div class="fld"><label for="e_note">メモ（効果の中身を変えたいとき・相談したいことなど）</label><textarea id="e_note" rows="3">${esc(e.note || '')}</textarea></div>
+    <div class="acts"><label class="chk"><input type="checkbox" id="e_done"${e.done ? ' checked' : ''}> 見直し済み</label><span style="flex:1"></span><span class="msg" id="tmsg"></span>
+      <button class="btn" id="b_reset">元に戻す</button><button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
+  </div>`;
+  const mark = () => FIELDS.forEach((k) => { const el = $('e_' + k); el.closest('.fld').classList.toggle('changed', readField(k, el.value) !== t[k]); });
+  FIELDS.forEach((k) => $('e_' + k).addEventListener('input', mark)); mark();
+  $('shade').onclick = closeSheet; $('b_close').onclick = closeSheet;
+  $('b_reset').onclick = () => { FIELDS.forEach((k) => { $('e_' + k).value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
+  $('b_save').onclick = async () => {
+    const doc = {};
+    FIELDS.forEach((k) => { const v = readField(k, $('e_' + k).value); if (v !== t[k]) doc[k] = v; });
+    const note = $('e_note').value.trim(); if (note) doc.note = note;
+    if ($('e_done').checked) doc.done = true;
+    $('b_save').disabled = true; $('tmsg').textContent = '保存中…';
+    try {
+      const ref = FB.doc(FB.db, 'adminTiles', t.id);
+      if (Object.keys(doc).length) await FB.setDoc(ref, { ...doc, updatedAt: Date.now() }); else await FB.deleteDoc(ref);
+      closeSheet();
+    } catch (err) { $('tmsg').innerHTML = `<span class="err">保存できませんでした（${esc(err.code || err.message)}）</span>`; $('b_save').disabled = false; }
+  };
+}
+function closeSheet() { open = null; $('layer').innerHTML = ''; }
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && open) closeSheet(); });
+async function startTiles() {
+  try { tiles = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); }
+  catch (e) { $('stats').innerHTML = '<span class="err">タイルの一覧を読み込めませんでした。開き直してください</span>'; return; }
+  chips($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
+  chips($('fCat'), Object.entries(CAT), f.cat);
+  chips($('fScope'), Object.entries(SCOPE), f.scope);
+  chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
+  $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
+  $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
+  render();
+  FB.onSnapshot(FB.collection(FB.db, 'adminTiles'), (snap) => {
+    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; render();
+  }, (e) => { $('stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
+}
+</script>
+</body>
+</html>
