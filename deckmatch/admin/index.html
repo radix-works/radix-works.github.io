@@ -50,7 +50,10 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .fld { display: flex; flex-direction: column; gap: 4px }
 .fld label, .lab { font-size: 12px; color: var(--sub); font-weight: 700 }
 .fld textarea { min-height: 6em; resize: vertical; line-height: 1.5 }
-.gifts { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px }
+.gifts { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px }
+.ggroup { display: flex; flex-direction: column; gap: 6px; padding-block: 6px; border-top: 1px dashed var(--line) }
+.ggroup:first-child { border-top: 0 }
+.ggroup h3 { margin: 0; font-size: 12px; color: var(--ink) }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .preview { border: 2px solid var(--ink); border-radius: 8px; background: var(--bg); padding: 12px }
@@ -146,15 +149,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
         <div class="fld"><label for="mText">本文（改行で段落が分かれます）</label><textarea id="mText" placeholder="例：一部の画面で表示が乱れる不具合がありました。&#10;おわびとして、ジェムをお届けします。"></textarea></div>
         <div class="fld">
           <span class="lab">配る物（配らないものは空のまま）</span>
-          <div class="gifts">
-            <label class="fld"><span class="lab">ジェム</span><input type="number" min="0" max="100000" id="g_gems"></label>
-            <label class="fld"><span class="lab">コイン</span><input type="number" min="0" max="10000000" id="g_coins"></label>
-            <label class="fld"><span class="lab">回復薬（小）</span><input type="number" min="0" max="1000" id="g_potionSmall"></label>
-            <label class="fld"><span class="lab">回復薬（中）</span><input type="number" min="0" max="1000" id="g_potionMid"></label>
-            <label class="fld"><span class="lab">回復薬（大）</span><input type="number" min="0" max="1000" id="g_potionLarge"></label>
-            <label class="fld"><span class="lab">タイルガチャ券</span><input type="number" min="0" max="100" id="g_tileTickets"></label>
-            <label class="fld"><span class="lab">スキンガチャ券</span><input type="number" min="0" max="100" id="g_skinTickets"></label>
-          </div>
+          <div id="giftHost"></div>
         </div>
         <div class="two">
           <div class="fld"><label for="mFrom">出し始め（空ならすぐ）</label><input type="datetime-local" id="mFrom"></div>
@@ -249,7 +244,18 @@ function ask(title, lines, okLabel) {
 }
 
 /* ---------- メール ---------- */
-const GIFTS = [['gems', 'ジェム'], ['coins', 'コイン'], ['potionSmall', '回復薬（小）'], ['potionMid', '回復薬（中）'], ['potionLarge', '回復薬（大）'], ['tileTickets', 'タイルガチャ券'], ['skinTickets', 'スキンガチャ券']];
+// 配れる物（ゲーム側の読み方は src/game/serverMail.ts、上限は firestore.rules の saneMail。2026-10-08 ユーザー指定「配るもの　が不足しすぎじゃない？」）
+const STONE_COLORS = [['crimson', '紅石'], ['azure', '青石'], ['verdant', '緑石'], ['amber', '黄石'], ['pale', '白石']];
+const STONE_SIZES = [['small', '小'], ['mid', '中'], ['large', '大']];
+const GIFT_GROUPS = [
+  ['通貨', [['gems', 'ジェム', 100000], ['coins', 'コイン', 10000000]]],
+  ['ガチャ券', [['tileTickets', 'タイル11回ガチャ券', 100], ['skinTickets', 'スキン11回ガチャ券', 100], ['tileSingle', 'タイルガチャ券（1回）', 100], ['skinSingle', 'スキンガチャ券（1回）', 100]]],
+  ['回復', [['potionSmall', '回復薬（小）', 1000], ['potionMid', '回復薬（中）', 1000], ['potionLarge', '回復薬（大）', 1000], ['stamina', 'スタミナ', 1000]]],
+  ['強化石', STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 1000]))],
+  ['そのほか', [['shards', 'スキンのかけら', 10000], ['tilePoints', 'タイルのかけら', 100000], ['medals', 'パーティーメダル', 10000], ['candy', 'キャンディ', 100000]]],
+];
+const GIFTS = GIFT_GROUPS.flatMap(([, items]) => items);
+$('giftHost').innerHTML = GIFT_GROUPS.map(([g, items]) => `<div class="ggroup"><h3>${g}</h3><div class="gifts">${items.map(([k, l, max]) => `<label class="fld"><span class="lab">${l}</span><input type="number" min="0" max="${max}" id="g_${k}"></label>`).join('')}</div></div>`).join('');
 const fmt = (ms) => { if (typeof ms !== 'number') return ''; const d = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const giftPills = (d) => GIFTS.filter(([k]) => d[k]).map(([k, l]) => `<span class="pill">${l} ×${Number(d[k]).toLocaleString()}</span>`).join('');
 let target = null; // { uid, name, code }
@@ -265,7 +271,10 @@ function readForm() {
 function problems(d) {
   const p = [];
   if (!d.title) p.push('見出しを入れてください');
-  for (const [k, l] of GIFTS) if (d[k] !== undefined && (!Number.isInteger(d[k]) || d[k] <= 0)) p.push(`${l}は 1 以上の整数にしてください（配らないなら空に）`);
+  for (const [k, l, max] of GIFTS) {
+    if (d[k] !== undefined && (!Number.isInteger(d[k]) || d[k] <= 0)) p.push(`${l}は 1 以上の整数にしてください（配らないなら空に）`);
+    else if (d[k] > max) p.push(`${l}は 1 通 ${max.toLocaleString()} までです`);
+  }
   if (d.from && d.until && d.until <= d.from) p.push('出し終わりは、出し始めより後にしてください');
   if ($('toOne').checked && !target) p.push('あて先のフレンドコードを入れてください');
   return p;
