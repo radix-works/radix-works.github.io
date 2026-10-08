@@ -497,6 +497,18 @@ const bornAt = (t) => t.createdAt || parseInt(String(t.id).slice(4, 12), 36) || 
  * 並び替えると order（0, 1, 2…）を書く。まだ並び替えていないものは作った時刻なので、後から作ったものは末尾に続く */
 const orderOf = (t) => t.order ?? bornAt(t);
 const keepOrder = (id) => (edits[id]?.order !== undefined ? { order: edits[id].order } : {});
+/* 新しいタイルの複製（2026-10-08 ユーザー指定「新しいタイルを作ったあとの複製機能を作って。複製を押したら、その下に同じのを作る」）。
+ * 画面に出ている値（項目・対象・メモ）を写して別のタイルとして保存し、並びを元のすぐ下にする。見直し済みの印は写さない */
+async function dupTile(srcId, get) {
+  const d = blankTile(), doc = { isNew: true, createdAt: Date.now() };
+  FIELDS.forEach((k) => { doc[k] = get(k); }); doc.targetKind = get('targetKind');
+  const note = String(get('note') ?? '').trim(); if (note) doc.note = note;
+  const ids = tiles.filter((t) => t.isNew && t.id !== d.id).sort((a, b) => orderOf(a) - orderOf(b)).map((t) => t.id);
+  ids.splice(ids.indexOf(srcId) + 1, 0, d.id);
+  await FB.setDoc(FB.doc(FB.db, 'adminTiles', d.id), { ...doc, order: ids.indexOf(d.id), updatedAt: Date.now() });
+  for (const [i, id] of ids.entries()) if (id !== d.id && edits[id]?.order !== i) await FB.setDoc(FB.doc(FB.db, 'adminTiles', id), { order: i }, { merge: true });
+  return d.id;
+}
 function rebuildTiles() {
   const news = Object.entries(edits).filter(([, d]) => d.isNew).map(([id, d]) => newTileOf(id, d));
   tiles = [...base, ...news];
@@ -614,7 +626,7 @@ function rowHtml(t) {
   const r = statOf(t);
   return `<tr data-row="${esc(t.id)}"${pending[t.id] ? ' class="dirtyrow"' : ''}>
     <td class="sx s1"${t.isNew && !t.draft ? ` data-drag="${esc(t.id)}" title="ドラッグで並び替え"` : ''}><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
-    <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.draft ? '<span class="flag-in">未保存の新しい行</span>' : t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}${t.draft ? `<button class="lnk" data-drop="${esc(t.id)}">この行を消す</button>` : `<button class="lnk" data-open="${esc(t.id)}">詳しく</button>${t.isNew ? `<button class="lnk" data-kill="${esc(t.id)}">消す</button>` : ''}`}</div></td>
+    <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.draft ? '<span class="flag-in">未保存の新しい行</span>' : t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}${t.draft ? `<button class="lnk" data-drop="${esc(t.id)}">この行を消す</button>` : `<button class="lnk" data-open="${esc(t.id)}">詳しく</button>${t.isNew ? `<button class="lnk" data-dup="${esc(t.id)}">複製</button><button class="lnk" data-kill="${esc(t.id)}">消す</button>` : ''}`}</div></td>
     <td class="sx s3 c-done${cellCls(t, 'done')}">${cellInput(t, 'done', 'check')}</td>
     ${TCOLS.map(([k, , kind]) => `<td class="c-${k}${cellCls(t, k)}">${cellInput(t, k, kind)}</td>`).join('')}
     <td class="c-stat">${stGames ? `${fmtPct(r.useRate)}<br><span class="msg">勝率 ${fmtPct(r.useWin)}</span>` : '―'}</td>
@@ -689,6 +701,14 @@ function startTable() {
       if (!(await ask('このタイルを消しますか', [`「${cur(t, 'name') || '（名前なし）'}」`, '新しく作ったタイルを、一覧から消します。元に戻せません。'], '消す'))) return;
       try { kill.blur(); await FB.deleteDoc(FB.doc(FB.db, 'adminTiles', t.id)); delete pending[t.id]; syncBulk(); }
       catch (e) { alert(`消せませんでした（${e.code || e.message}）`); }
+      return;
+    }
+    const dup = ev.target.closest('[data-dup]');
+    if (dup) {
+      const t = findTile(dup.dataset.dup); if (!t || dup.disabled) return;
+      dup.disabled = true; dup.textContent = '複製中…';
+      try { await dupTile(t.id, (k) => cur(t, k)); }
+      catch (e) { alert(`複製できませんでした（${e.code || e.message}）`); dup.disabled = false; dup.textContent = '複製'; }
       return;
     }
     const dr = ev.target.closest('[data-drop]'); if (dr) { drafts = drafts.filter((x) => x.id !== dr.dataset.drop); delete pending[dr.dataset.drop]; render(); return; }
@@ -840,7 +860,7 @@ function openSheet(id, draft) {
     <h3 class="sec">見比べる（同じ種類・同じレアリティのほかの札 ${peers.length} 枚）</h3>
     <div class="peers">${peerHtml}</div>
     <div class="acts"><label class="chk"><input type="checkbox" id="e_done"${e.done ? ' checked' : ''}> 見直し済み</label><span style="flex:1"></span><span class="msg" id="tmsg"></span>
-      ${fresh ? (draft ? '' : '<button class="btn" id="b_del">このタイルを消す</button>') : '<button class="btn" id="b_reset">元に戻す</button>'}<button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
+      ${fresh ? (draft ? '' : '<button class="btn" id="b_del">このタイルを消す</button><button class="btn" id="b_dup">複製</button>') : '<button class="btn" id="b_reset">元に戻す</button>'}<button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
   </div>`;
   const mark = () => { if (!fresh) FIELDS.forEach((k) => { $('e_' + k).closest('.fld').classList.toggle('changed', inputVal(k) !== t[k]); }); };
   FIELDS.forEach((k) => { $('e_' + k).addEventListener('input', mark); $('e_' + k).addEventListener('change', mark); }); mark();
@@ -850,6 +870,11 @@ function openSheet(id, draft) {
     if (!(await ask('このタイルを消しますか', [`「${val(t, 'name') || '（名前なし）'}」`, '新しく作ったタイルを、一覧から消します。元に戻せません。'], '消す'))) return;
     try { await FB.deleteDoc(FB.doc(FB.db, 'adminTiles', t.id)); closeSheet(); }
     catch (err) { $('tmsg').innerHTML = `<span class="err">消せませんでした（${esc(err.code || err.message)}）</span>`; }
+  };
+  if ($('b_dup')) $('b_dup').onclick = async () => {
+    $('b_dup').disabled = true; $('tmsg').textContent = '複製中…';
+    try { await dupTile(t.id, (k) => k === 'note' ? $('e_note').value : k === 'targetKind' ? $('e_targetKind').value : inputVal(k)); closeSheet(); }
+    catch (err) { $('tmsg').innerHTML = `<span class="err">複製できませんでした（${esc(err.code || err.message)}）</span>`; $('b_dup').disabled = false; }
   };
   if ($('b_reset')) $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
   $('b_save').onclick = async () => {
