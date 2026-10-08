@@ -166,7 +166,8 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
       </div>
 
       <div class="box">
-        <div class="row"><h2 style="flex:1">全員へのメール</h2><button class="btn small" id="reloadAll">読み直す</button></div>
+        <div class="row"><h2 style="flex:1">送った履歴</h2><button class="btn small" id="reloadAll">読み直す</button></div>
+        <div class="row" id="histFilter"><button class="chip" data-f="all" aria-pressed="true">すべて</button><button class="chip" data-f="everyone" aria-pressed="false">全員へ</button><button class="chip" data-f="one" aria-pressed="false">1人へ</button><span class="msg" id="histCount"></span></div>
         <div class="list" id="allList"><p class="msg">読み込み中…</p></div>
         <div class="row"><h2 style="flex:1">1人へのメールを見る</h2></div>
         <div class="row"><input type="text" id="lookCode" placeholder="フレンドコード（8 文字）" maxlength="8"><button class="btn small" id="lookBtn">見る</button><span class="msg" id="lookName"></span></div>
@@ -293,22 +294,55 @@ async function findCode(code) {
   const u = await FB.getDoc(FB.doc(FB.db, 'users', uid));
   return { uid, code, name: (u.exists() && u.data().name) || '（名前なし）' };
 }
-function itemHtml(id, d) {
+function itemHtml(id, d, to) {
   return `<div class="item"><div class="top"><b>${esc(d.title)}</b><button class="btn small" data-del="${esc(id)}">取り消す</button></div>
-    <div class="meta">${fmt(d.at)} に出した${d.from ? '・' + fmt(d.from) + ' から' : ''}${d.until ? '・' + fmt(d.until) + ' まで' : ''}</div>
+    <div class="meta">あて先：${esc(to)}・${fmt(d.at)} に出した${d.from ? '・' + fmt(d.from) + ' から' : ''}${d.until ? '・' + fmt(d.until) + ' まで' : ''}</div>
     ${d.text ? `<div class="msg">${esc(d.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="row">${giftPills(d) || '<span class="pill">お知らせ</span>'}</div></div>`;
+}
+/** rows: { ref, d, to } の並び。取り消したら reload を呼ぶ */
+function showRows(host, rows, reload) {
+  host.innerHTML = rows.length ? rows.map((r, i) => itemHtml(String(i), r.d, r.to)).join('') : '<p class="msg">まだありません</p>';
+  host.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    const r = rows[Number(b.dataset.del)];
+    if (!(await ask('メールを取り消しますか', [`「${r.d.title}」（あて先：${r.to}）`, 'まだ受け取っていない人には届かなくなります。もう受け取った人の配る物は戻りません。'], '取り消す'))) return;
+    try { await FB.deleteDoc(r.ref); reload(); }
+    catch (e) { alert(e.message); }
+  });
 }
 async function loadList(path, host, who) {
   host.innerHTML = '<p class="msg">読み込み中…</p>';
   try {
     const snap = await FB.getDocs(FB.query(FB.collection(FB.db, ...path), FB.orderBy('at', 'desc')));
-    host.innerHTML = snap.empty ? '<p class="msg">まだありません</p>' : snap.docs.map((x) => itemHtml(x.id, x.data())).join('');
-    host.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-      const id = b.dataset.del, d = snap.docs.find((x) => x.id === id).data();
-      if (!(await ask('メールを取り消しますか', [`「${d.title}」（${who}）`, 'まだ受け取っていない人には届かなくなります。もう受け取った人の配る物は戻りません。'], '取り消す'))) return;
-      try { await FB.deleteDoc(FB.doc(FB.db, ...path, id)); loadList(path, host, who); }
-      catch (e) { alert(e.message); }
-    });
+    showRows(host, snap.docs.map((x) => ({ ref: x.ref, d: x.data(), to: who })), () => loadList(path, host, who));
+  } catch (e) { host.innerHTML = `<p class="err">読み込めませんでした（${esc(e.code || e.message)}）</p>`; }
+}
+/* 送った履歴：全員へ（mailbox）と 1 人へ（users/{uid}/mailbox）をまとめて新しい順に */
+let hist = [], histF = 'all';
+const histShown = () => hist.filter((r) => histF === 'all' || (histF === 'one') === Boolean(r.uid));
+function renderHistory() {
+  const rows = histShown();
+  $('histCount').textContent = `${rows.length} 通`;
+  showRows($('allList'), rows, loadHistory);
+}
+async function loadHistory() {
+  const host = $('allList');
+  host.innerHTML = '<p class="msg">読み込み中…</p>'; $('histCount').textContent = '';
+  try {
+    const snap = await FB.getDocs(FB.collectionGroup(FB.db, 'mailbox'));
+    const names = new Map();
+    const uids = [...new Set(snap.docs.map((x) => x.ref.parent.parent && x.ref.parent.parent.id).filter(Boolean))];
+    await Promise.all(uids.map(async (uid) => {
+      try {
+        const u = await FB.getDoc(FB.doc(FB.db, 'users', uid));
+        const v = u.exists() ? u.data() : {};
+        names.set(uid, `${v.name || '（名前なし）'}${v.code ? `（${v.code}）` : ''}`);
+      } catch { names.set(uid, '（読めない人）'); }
+    }));
+    hist = snap.docs.map((x) => {
+      const uid = x.ref.parent.parent ? x.ref.parent.parent.id : null;
+      return { ref: x.ref, d: x.data(), uid, to: uid ? names.get(uid) : '全員' };
+    }).sort((a, b) => (b.d.at || 0) - (a.d.at || 0));
+    renderHistory();
   } catch (e) { host.innerHTML = `<p class="err">読み込めませんでした（${esc(e.code || e.message)}）</p>`; }
 }
 function startMail() {
@@ -337,20 +371,25 @@ function startMail() {
       $('sendMsg').innerHTML = `<span class="okmsg">${esc(who)}に送りました</span>`;
       ['mTitle', 'mText', 'mFrom', 'mUntil', ...GIFTS.map(([k]) => 'g_' + k)].forEach((id) => { $(id).value = ''; });
       renderPreview();
-      if (target) { $('lookCode').value = target.code; showOne(target); } else loadAll();
+      if (target) { $('lookCode').value = target.code; showOne(target); }
+      loadHistory();
     } catch (e) { $('sendMsg').innerHTML = `<span class="err">送れませんでした（${esc(e.code || e.message)}）</span>`; }
     $('sendBtn').disabled = false;
   };
-  const loadAll = () => loadList(['mailbox'], $('allList'), '全員');
-  const showOne = (t) => { $('lookName').innerHTML = `<b>${esc(t.name)}</b>`; loadList(['users', t.uid, 'mailbox'], $('oneList'), t.name); };
-  $('reloadAll').onclick = loadAll;
+  const showOne = (t) => { $('lookName').innerHTML = `<b>${esc(t.name)}</b>`; loadList(['users', t.uid, 'mailbox'], $('oneList'), `${t.name}（${t.code}）`); };
+  $('reloadAll').onclick = loadHistory;
+  $('histFilter').querySelectorAll('[data-f]').forEach((b) => b.onclick = () => {
+    histF = b.dataset.f;
+    $('histFilter').querySelectorAll('[data-f]').forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+    renderHistory();
+  });
   $('lookBtn').onclick = async () => {
     $('oneList').innerHTML = ''; $('lookName').textContent = '探しています…';
     const t = await findCode($('lookCode').value).catch(() => null);
     if (!t) { $('lookName').innerHTML = '<span class="err">見つかりません</span>'; return; }
     showOne(t);
   };
-  loadAll();
+  loadHistory();
 }
 
 /* ---------- タイル見直し ---------- */
