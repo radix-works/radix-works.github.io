@@ -436,7 +436,7 @@ const val = (t, k) => { const e = edits[t.id]; return e && e[k] !== undefined ? 
 const changedKeys = (t) => { const e = edits[t.id]; return e ? FIELDS.filter((k) => e[k] !== undefined && e[k] !== t[k]) : []; };
 const rimVars = (s) => RIM[s].map((c, i) => `--r${i + 1}:${c}`).join(';');
 const stars = (n) => '★'.repeat(n);
-const marksOf = (m) => [m.solo && '単独', m.when === 'mine' && '自分の番だけ', m.when === 'theirs' && '相手の番だけ', m.quiet && '静か'].filter(Boolean);
+const marksOf = (m) => [m.solo && 'ソロ', m.when === 'mine' && '自分の番だけ', m.when === 'theirs' && '相手の番だけ', m.quiet && 'サイレント'].filter(Boolean);
 const marks = (t) => marksOf({ solo: val(t, 'solo'), when: val(t, 'when'), quiet: val(t, 'quiet') });
 
 function chips(host, items, set, key) {
@@ -590,7 +590,7 @@ function openSheet(id) {
     <div class="two">${fld('star', 'レアリティ', 'star')}${fld('cost', 'コスト', 'num')}</div>
     ${fld('short', '札の短い説明', 'area')}${fld('text', '効果（全文・対戦）', 'area')}${fld('stageText', '効果（ステージ用の文）', 'area')}
     <h3 class="sec">特殊効果（印）</h3>
-    <div class="two">${fld('solo', '単独', 'check')}${fld('quiet', '静か', 'check')}</div>
+    <div class="two">${fld('solo', 'ソロ', 'check')}${fld('quiet', 'サイレント', 'check')}</div>
     <div class="two">${fld('when', '出せる番', WHEN)}<div></div></div>
     <h3 class="sec">分類</h3>
     <div class="two">${fld('category', '種類', CAT)}${fld('scope', '使いどころ', SCOPE)}</div>
@@ -627,7 +627,7 @@ async function startTiles() {
   chips($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
   chips($('fCat'), Object.entries(CAT), f.cat);
   chips($('fScope'), Object.entries(SCOPE), f.scope);
-  chips($('fMark'), ['単独', '自分の番だけ', '相手の番だけ', '静か', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
+  chips($('fMark'), ['ソロ', '自分の番だけ', '相手の番だけ', 'サイレント', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
   chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
