@@ -100,6 +100,15 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .fld.changed input, .fld.changed textarea, .fld.changed select { border-color: var(--accent); background: var(--accent-soft) }
 .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: -24px; background: var(--panel); padding-block: 10px; border-top: 1px solid var(--line) }
 .chk { display: flex; gap: 6px; align-items: center; font-weight: 700 }
+.fld .chk { font-size: 15px; color: var(--ink) }
+.fld.changed .chk { color: var(--accent) }
+.sheet h3.sec { margin: 6px 0 -4px; font-size: 14px; border-top: 1px solid var(--line); padding-top: 12px }
+.peers { display: flex; flex-direction: column; gap: 6px }
+.peer { font: inherit; text-align: left; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px }
+.peer:hover { border-color: var(--accent) }
+.peer .pc { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums }
+.peer .ps, .peer .pm { grid-column: 1 / -1; font-size: 13px; color: var(--sub) }
+.peer .pm { font-size: 12px }
 .info { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--sub) }
 .confirm { position: fixed; z-index: 31; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px)); background: var(--panel); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 40px #0005 }
 .confirm-shade { position: fixed; inset: 0; background: var(--shade); z-index: 30 }
@@ -185,6 +194,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
       <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
       <div class="row"><span class="lab">種類</span><span id="fCat" class="row"></span></div>
       <div class="row"><span class="lab">使いどころ</span><span id="fScope" class="row"></span></div>
+      <div class="row"><span class="lab">印</span><span id="fMark" class="row"></span></div>
       <div class="row"><span class="lab">状態</span><span id="fState" class="row"></span>
         <span class="lab" style="margin-left:auto">並び</span>
         <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option></select></div>
@@ -397,16 +407,25 @@ const CAT = { attack: '攻め', defense: '守り', self: '整え', disrupt: '妨
 const CAT_ORDER = Object.keys(CAT);
 const SCOPE = { common: '共通', stage: 'ステージ', versus: '対戦' };
 const RIM = { 1: ['#e9e6df', '#c9c4ba', '#e2ded6', '#bdb8ad'], 2: ['#f4fbff', '#a9d8ec', '#e6f6fd', '#8fc6de'], 3: ['#f4f6f9', '#6f7b8c', '#dfe5ec', '#5d6878'], 4: ['#fff0bf', '#b88a3a', '#f1d58f', '#94691f'], 5: ['#ff9ecf', '#ffe08a', '#9ff2c8', '#8fd0ff', '#c7a4ff'] };
-const FIELDS = ['name', 'short', 'text', 'stageText', 'star', 'cost'];
+const FIELDS = ['name', 'short', 'text', 'stageText', 'star', 'cost', 'solo', 'when', 'quiet', 'category', 'scope'];
+const WHEN = { '': 'いつでも', mine: '自分の番だけ', theirs: '相手の番だけ' };
+const TARGET = { none: '選ばずに使う', ownHand: '自分の手を 1 つ選ぶ', oppHand: '相手の手を 1 つ選ぶ', anyHand: 'どちらかの手を 1 つ選ぶ', split: '自分の手の本数を分け直す', pick: '小窓で選ぶ（デッキ・捨て札・数など）' };
+/* 特殊効果（印）の意味。ゲームの決まり（src/game/tiles.ts の solo・when・quiet）と同じ */
+const MARK_HELP = {
+  solo: 'このターン、これ以外のタイルを出せない（前にも後にも）。強すぎる札の釣り合いを取る縛り',
+  when: '出せる番を決める。書かなければ、いつでも出せる',
+  quiet: '使っても相手にエナジーが入らない（ふつうは、タイルを使うと相手にエナジーが 1 入る）。小さい効果の札を損にしないための印',
+};
 let tiles = [], edits = {}, open = null;
-const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), state: 'all', sort: 'star' };
+const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), mark: new Set(), state: 'all', sort: 'star' };
 const urls = new Map();
 const artUrl = (t) => { if (!urls.has(t.id)) urls.set(t.id, URL.createObjectURL(new Blob([t.svg], { type: 'image/svg+xml' }))); return urls.get(t.id); };
 const val = (t, k) => { const e = edits[t.id]; return e && e[k] !== undefined ? e[k] : t[k]; };
 const changedKeys = (t) => { const e = edits[t.id]; return e ? FIELDS.filter((k) => e[k] !== undefined && e[k] !== t[k]) : []; };
 const rimVars = (s) => RIM[s].map((c, i) => `--r${i + 1}:${c}`).join(';');
 const stars = (n) => '★'.repeat(n);
-const marks = (t) => [t.solo && '単独', t.when === 'mine' && '自分の番だけ', t.when === 'theirs' && '相手の番だけ', t.quiet && '静か'].filter(Boolean);
+const marksOf = (m) => [m.solo && '単独', m.when === 'mine' && '自分の番だけ', m.when === 'theirs' && '相手の番だけ', m.quiet && '静か'].filter(Boolean);
+const marks = (t) => marksOf({ solo: val(t, 'solo'), when: val(t, 'when'), quiet: val(t, 'quiet') });
 
 function chips(host, items, set, key) {
   host.innerHTML = '';
@@ -422,8 +441,9 @@ function render() {
   const list = tiles.filter((t) => {
     const e = edits[t.id] || {};
     if (f.star.size && !f.star.has(Number(val(t, 'star')))) return false;
-    if (f.cat.size && !f.cat.has(t.category)) return false;
-    if (f.scope.size && !f.scope.has(t.scope)) return false;
+    if (f.cat.size && !f.cat.has(val(t, 'category'))) return false;
+    if (f.scope.size && !f.scope.has(val(t, 'scope'))) return false;
+    if (f.mark.size) { const m = marks(t); if (![...f.mark].some((x) => x === 'なし' ? !m.length : m.includes(x))) return false; }
     if (f.state === 'changed' && !changedKeys(t).length) return false;
     if (f.state === 'memo' && !e.note) return false;
     if (f.state === 'done' && !e.done) return false;
@@ -433,7 +453,7 @@ function render() {
   }).sort({
     star: (a, b) => val(a, 'star') - val(b, 'star') || val(a, 'cost') - val(b, 'cost'),
     cost: (a, b) => val(a, 'cost') - val(b, 'cost') || val(a, 'star') - val(b, 'star'),
-    cat: (a, b) => CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category) || val(a, 'star') - val(b, 'star'),
+    cat: (a, b) => CAT_ORDER.indexOf(val(a, 'category')) - CAT_ORDER.indexOf(val(b, 'category')) || val(a, 'star') - val(b, 'star'),
     name: (a, b) => String(val(a, 'name')).localeCompare(String(val(b, 'name')), 'ja'),
   }[f.sort]);
   $('grid').innerHTML = list.map((t) => {
@@ -442,13 +462,16 @@ function render() {
     return `<button class="card" data-id="${esc(t.id)}">${flag}
       <div class="art" style="${rimVars(s)}"><img alt="" loading="lazy" src="${artUrl(t)}"><span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
       <div class="nm">${esc(val(t, 'name'))}</div><div class="sh">${esc(val(t, 'short'))}</div>
-      <div class="tags"><span class="tag">${CAT[t.category]}</span><span class="tag">${SCOPE[t.scope]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
+      <div class="tags"><span class="tag">${CAT[val(t, 'category')]}</span><span class="tag">${SCOPE[val(t, 'scope')]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
   }).join('');
   $('empty').hidden = list.length > 0;
   $('stats').innerHTML = `全 <b>${tiles.length}</b> 枚 ・ 表示 <b>${list.length}</b> ・ 変更あり <b>${tiles.filter((t) => changedKeys(t).length).length}</b> ・ 確認済み <b>${tiles.filter((t) => edits[t.id]?.done).length}</b>`;
 }
 $('grid').addEventListener('click', (ev) => { const c = ev.target.closest('.card'); if (c) openSheet(c.dataset.id); });
 const readField = (k, raw) => (k === 'star' || k === 'cost') ? Number(raw) : raw;
+/* 入力欄から今の値を読む（チェックは true/false） */
+const inputVal = (k) => { const el = $('e_' + k); return el.type === 'checkbox' ? el.checked : readField(k, el.value); };
+const shownOrig = (k, kind, orig) => kind === 'star' ? stars(orig) : kind === 'check' ? (orig ? '付いている' : '付いていない') : k === 'when' ? WHEN[orig] : k === 'category' ? CAT[orig] : k === 'scope' ? SCOPE[orig] : (orig === '' ? '（なし）' : orig);
 function openSheet(id) {
   const t = tiles.find((x) => x.id === id); if (!t) return;
   open = id; const e = edits[id] || {};
@@ -457,27 +480,43 @@ function openSheet(id) {
     const input = kind === 'area' ? `<textarea id="e_${k}" rows="3">${esc(v)}</textarea>`
       : kind === 'star' ? `<select id="e_${k}">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n == v ? ' selected' : ''}>${stars(n)}（${n}）</option>`).join('')}</select>`
       : kind === 'num' ? `<input type="number" id="e_${k}" min="0" max="20" value="${esc(v)}">`
+      : kind === 'check' ? `<label class="chk"><input type="checkbox" id="e_${k}"${v ? ' checked' : ''}> ${label}</label>`
+      : kind && typeof kind === 'object' ? `<select id="e_${k}">${Object.entries(kind).map(([o, l]) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
       : `<input type="text" id="e_${k}" value="${esc(v)}">`;
-    return `<div class="fld"><label for="e_${k}">${label}</label>${input}<div class="was">いまのゲーム：${esc(kind === 'star' ? stars(orig) : (orig === '' ? '（なし）' : orig))}</div></div>`;
+    const help = MARK_HELP[k] ? `<div class="was">${esc(MARK_HELP[k])}</div>` : '';
+    return `<div class="fld">${kind === 'check' ? '' : `<label for="e_${k}">${label}</label>`}${input}${help}<div class="was">いまのゲーム：${esc(shownOrig(k, typeof kind === 'string' ? kind : 'select', orig))}</div></div>`;
   };
+  /* 見比べる：同じ種類・同じレアリティのほかの札 */
+  const peers = tiles.filter((x) => x.id !== t.id && val(x, 'category') === val(t, 'category') && val(x, 'star') === val(t, 'star'))
+    .sort((a, b) => val(a, 'cost') - val(b, 'cost'));
+  const peerHtml = peers.length ? peers.map((x) => `<button class="peer" data-peer="${esc(x.id)}"><b>${esc(val(x, 'name'))}</b><span class="pc">コスト ${esc(x.costLabel && edits[x.id]?.cost === undefined ? x.costLabel : val(x, 'cost'))}</span><span class="ps">${esc(val(x, 'short'))}</span>${marks(x).length ? `<span class="pm">${marks(x).join('・')}</span>` : ''}</button>`).join('') : '<p class="msg">ありません</p>';
   $('layer').innerHTML = `<div class="shade" id="shade"></div>
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="top"><div class="art" style="${rimVars(t.star)}"><img alt="" src="${artUrl(t)}"></div>
-      <div><h2>${esc(t.name)}</h2><div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>デッキに入る枚数：${t.maxCopies}</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
+      <div><h2>${esc(t.name)}</h2><div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>対象：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
     ${fld('name', '名前')}
     <div class="two">${fld('star', 'レアリティ', 'star')}${fld('cost', 'コスト', 'num')}</div>
     ${fld('short', '札の短い説明', 'area')}${fld('text', '効果（全文・対戦）', 'area')}${fld('stageText', '効果（ステージ用の文）', 'area')}
+    <h3 class="sec">特殊効果（印）</h3>
+    <div class="two">${fld('solo', '単独', 'check')}${fld('quiet', '静か', 'check')}</div>
+    <div class="two">${fld('when', '出せる番', WHEN)}<div></div></div>
+    <h3 class="sec">分類</h3>
+    <div class="two">${fld('category', '種類', CAT)}${fld('scope', '使いどころ', SCOPE)}</div>
+    <h3 class="sec">メモ</h3>
     <div class="fld"><label for="e_note">メモ（効果の中身を変えたいとき・相談したいことなど）</label><textarea id="e_note" rows="3">${esc(e.note || '')}</textarea></div>
+    <h3 class="sec">見比べる（同じ種類・同じレアリティのほかの札 ${peers.length} 枚）</h3>
+    <div class="peers">${peerHtml}</div>
     <div class="acts"><label class="chk"><input type="checkbox" id="e_done"${e.done ? ' checked' : ''}> 見直し済み</label><span style="flex:1"></span><span class="msg" id="tmsg"></span>
       <button class="btn" id="b_reset">元に戻す</button><button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
   </div>`;
-  const mark = () => FIELDS.forEach((k) => { const el = $('e_' + k); el.closest('.fld').classList.toggle('changed', readField(k, el.value) !== t[k]); });
-  FIELDS.forEach((k) => $('e_' + k).addEventListener('input', mark)); mark();
+  const mark = () => FIELDS.forEach((k) => { $('e_' + k).closest('.fld').classList.toggle('changed', inputVal(k) !== t[k]); });
+  FIELDS.forEach((k) => { $('e_' + k).addEventListener('input', mark); $('e_' + k).addEventListener('change', mark); }); mark();
+  document.querySelectorAll('[data-peer]').forEach((b) => b.onclick = () => openSheet(b.dataset.peer));
   $('shade').onclick = closeSheet; $('b_close').onclick = closeSheet;
-  $('b_reset').onclick = () => { FIELDS.forEach((k) => { $('e_' + k).value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
+  $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
   $('b_save').onclick = async () => {
     const doc = {};
-    FIELDS.forEach((k) => { const v = readField(k, $('e_' + k).value); if (v !== t[k]) doc[k] = v; });
+    FIELDS.forEach((k) => { const v = inputVal(k); if (v !== t[k]) doc[k] = v; });
     const note = $('e_note').value.trim(); if (note) doc.note = note;
     if ($('e_done').checked) doc.done = true;
     $('b_save').disabled = true; $('tmsg').textContent = '保存中…';
@@ -496,6 +535,7 @@ async function startTiles() {
   chips($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
   chips($('fCat'), Object.entries(CAT), f.cat);
   chips($('fScope'), Object.entries(SCOPE), f.scope);
+  chips($('fMark'), ['単独', '自分の番だけ', '相手の番だけ', '静か', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
   chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
