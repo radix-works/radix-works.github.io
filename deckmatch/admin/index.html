@@ -475,7 +475,7 @@ const MAX_COPIES = { 1: 3, 2: 3, 3: 3, 4: 2, 5: 1 };
  * **新しいタイル**（2026-10-08 ユーザー指定「タイルの作成もできるようにしてほしい。作成して保存したら追加されるやつで、絵は入らないけどほかは選択していろいろ設定できるように」）。
  * adminTiles/{new-…} に isNew: true で、全部の項目を持って置く。ゲームに入れるのは、効果の作り込みと絵を付けてから
  */
-const blankTile = () => ({ id: 'new-' + Date.now().toString(36), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, targetKind: 'none', svg: '' });
+const blankTile = () => ({ id: 'new-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, targetKind: 'none', svg: '' });
 const newTileOf = (id, d) => ({ ...blankTile(), ...Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'updatedAt' && k !== 'note' && k !== 'done')), id, isNew: true, svg: '' });
 function rebuildTiles() {
   const news = Object.entries(edits).filter(([, d]) => d.isNew).map(([id, d]) => newTileOf(id, d));
@@ -571,6 +571,9 @@ const fmtPct = (v) => v === null ? '―' : `${v}%`;
  * 打った値は pending に持ち、行の「保存」か「まとめて保存」で adminTiles に書く。保存するまでは、絞り込みを変えても消えない
  */
 let pending = {};
+/* 一覧で編集のときの「＋ 新しいタイル」は、表のいちばん上に行を足す（2026-10-08 ユーザー指定「新しいタイル作成も、一覧の時は行が増えてそこに打ち込んでいきたい」）。保存するまでは drafts だけにある */
+let drafts = [];
+const findTile = (id) => tiles.find((x) => x.id === id) || drafts.find((x) => x.id === id);
 const TCOLS = [['star', 'レアリティ', 'star'], ['cost', 'コスト', 'num'], ['short', '札の短い説明', 'area'], ['text', '効果（全文・対戦）', 'area'], ['stageText', '効果（ステージ用の文）', 'area'],
   ['solo', 'ソロ', 'check'], ['quiet', 'サイレント', 'check'], ['when', '出せる番', WHEN], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '対象', TARGET], ['note', 'メモ', 'area']];
 const savedVal = (t, k) => k === 'note' ? (edits[t.id]?.note || '') : k === 'done' ? !!edits[t.id]?.done : k === 'targetKind' ? t.targetKind : val(t, k);
@@ -579,7 +582,7 @@ const kindOf = (k) => k === 'name' ? 'text' : k === 'done' ? 'check' : TCOLS.fin
 function cellInput(t, k, kind) {
   const v = cur(t, k), d = `data-id="${esc(t.id)}" data-k="${k}" aria-label="${esc((TCOLS.find((c) => c[0] === k) || [0, k === 'done' ? '見直し済み' : '名前'])[1])}"`;
   if (k === 'targetKind' && !t.isNew) return `<span class="ro">${esc(TARGET[v] || '―')}</span>`;
-  if (kind === 'text') return `<input type="text" ${d} value="${esc(v)}">`;
+  if (kind === 'text') return `<input type="text" ${d} value="${esc(v)}"${t.draft ? ' placeholder="新しいタイルの名前"' : ''}>`;
   if (kind === 'area') return `<textarea rows="1" ${d}>${esc(v)}</textarea>`;
   if (kind === 'star') return `<select ${d}>${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n == v ? ' selected' : ''}>${stars(n)}</option>`).join('')}</select>`;
   if (kind === 'num') return `<input type="number" min="0" max="20" ${d} value="${esc(v)}">`;
@@ -591,7 +594,7 @@ function rowHtml(t) {
   const r = statOf(t);
   return `<tr data-row="${esc(t.id)}"${pending[t.id] ? ' class="dirtyrow"' : ''}>
     <td class="sx s1"><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
-    <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}<button class="lnk" data-open="${esc(t.id)}">詳しく</button></div></td>
+    <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.draft ? '<span class="flag-in">未保存の新しい行</span>' : t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}${t.draft ? `<button class="lnk" data-drop="${esc(t.id)}">この行を消す</button>` : `<button class="lnk" data-open="${esc(t.id)}">詳しく</button>`}</div></td>
     <td class="sx s3 c-done${cellCls(t, 'done')}">${cellInput(t, 'done', 'check')}</td>
     ${TCOLS.map(([k, , kind]) => `<td class="c-${k}${cellCls(t, k)}">${cellInput(t, k, kind)}</td>`).join('')}
     <td class="c-stat">${stGames ? `${fmtPct(r.useRate)}<br><span class="msg">勝率 ${fmtPct(r.useWin)}</span>` : '―'}</td>
@@ -599,7 +602,7 @@ function rowHtml(t) {
 }
 function renderTable(list) {
   $('tbl').tHead.innerHTML = `<tr><th class="sx s1">絵</th><th class="sx s2">名前</th><th class="sx s3">見直し<br>済み</th>${TCOLS.map(([k, l]) => `<th class="c-${k}">${l}</th>`).join('')}<th class="c-stat">使用率</th><th class="c-act"></th></tr>`;
-  $('tbl').tBodies[0].innerHTML = list.map(rowHtml).join('');
+  $('tbl').tBodies[0].innerHTML = [...drafts, ...list].map(rowHtml).join('');
   // 3 つ目の固定列（見直し済み）は、絵と名前の列の幅のぶん右に置く
   const h = $('tbl').tHead.rows[0].cells; $('tbl').style.setProperty('--s3left', h[0].offsetWidth + h[1].offsetWidth + 'px');
   syncBulk();
@@ -611,7 +614,7 @@ function syncBulk() {
 }
 function refreshRows() {
   $('tbl').querySelectorAll('tbody tr').forEach((tr) => {
-    const id = tr.dataset.row, t = tiles.find((x) => x.id === id);
+    const id = tr.dataset.row, t = findTile(id);
     if (!t || pending[id] || tr.contains(document.activeElement)) return;
     tr.outerHTML = rowHtml(t);
   });
@@ -619,7 +622,7 @@ function refreshRows() {
 const fit = (ta) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
 function onCell(ev) {
   const el = ev.target, id = el.dataset?.id, k = el.dataset?.k; if (!id || !k) return;
-  const t = tiles.find((x) => x.id === id); if (!t) return;
+  const t = findTile(id); if (!t) return;
   const kind = kindOf(k);
   const v = kind === 'check' ? el.checked : kind === 'star' || kind === 'num' ? Number(el.value) : el.value;
   const p = (pending[id] ||= {});
@@ -634,7 +637,7 @@ function onCell(ev) {
   syncBulk();
 }
 async function saveRow(id) {
-  const t = tiles.find((x) => x.id === id); if (!t || !pending[id]) return true;
+  const t = findTile(id); if (!t || !pending[id]) return true;
   const doc = {};
   if (t.isNew) {
     FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true;
@@ -645,6 +648,7 @@ async function saveRow(id) {
   const ref = FB.doc(FB.db, 'adminTiles', id);
   if (Object.keys(doc).length) await FB.setDoc(ref, { ...doc, updatedAt: Date.now() }); else await FB.deleteDoc(ref);
   delete pending[id];
+  drafts = drafts.filter((x) => x.id !== id);
   return true;
 }
 function startTable() {
@@ -656,6 +660,7 @@ function startTable() {
   tb.addEventListener('focusout', (ev) => { const tr = ev.target.closest('tr'); setTimeout(() => { if (tr && !tr.contains(document.activeElement)) tr.querySelectorAll('textarea').forEach((x) => { x.style.height = ''; }); }, 0); });
   tb.addEventListener('click', async (ev) => {
     const o = ev.target.closest('[data-open]'); if (o) { openSheet(o.dataset.open); return; }
+    const dr = ev.target.closest('[data-drop]'); if (dr) { drafts = drafts.filter((x) => x.id !== dr.dataset.drop); delete pending[dr.dataset.drop]; render(); return; }
     const b = ev.target.closest('[data-save]'); if (!b) return;
     b.disabled = true; b.textContent = '保存中…';
     try { if (await saveRow(b.dataset.save)) render(); else { b.disabled = false; b.textContent = '保存'; } }
@@ -669,7 +674,7 @@ function startTable() {
   };
   $('bulkUndo').onclick = async () => {
     if (!(await ask('保存していない変更を取り消しますか', [`${Object.keys(pending).length} 枚ぶんの、まだ保存していない変更を元に戻します。`], '取り消す'))) return;
-    pending = {}; render();
+    pending = {}; drafts = []; render();
   };
   window.addEventListener('beforeunload', (ev) => { if (Object.keys(pending).length) { ev.preventDefault(); ev.returnValue = ''; } });
 }
@@ -946,7 +951,12 @@ async function startTiles() {
   [...$('fMode').children].forEach((b) => { const o = b.onclick; b.onclick = () => { o(); computeStats(); }; });
   $('sPeriod').addEventListener('change', (ev) => { fm.period = Number(ev.target.value); computeStats(); });
   $('sReload').onclick = loadStats;
-  $('newTile').onclick = () => openSheet(null, blankTile());
+  $('newTile').onclick = () => {
+    if (f.view !== 'table') { openSheet(null, blankTile()); return; }
+    const t = { ...blankTile(), draft: true, maxCopies: MAX_COPIES[1] }; drafts.unshift(t); render();
+    $('tableWrap').scrollTop = 0; $('tableWrap').scrollLeft = 0;
+    $('tbl').querySelector(`tr[data-row="${t.id}"] [data-k=name]`)?.focus();
+  };
   startTable();
   $('orderBtn').onclick = openOrder;
   $('importBtn').onclick = openImport;
