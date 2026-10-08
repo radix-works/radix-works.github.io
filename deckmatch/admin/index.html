@@ -71,6 +71,11 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .bar { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-block: 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px }
 .bar .row .lab { min-width: 4.5em }
 .bar input[type=search] { flex: 1 1 220px }
+.filters { flex-wrap: wrap; gap: 8px }
+.filters input[type=search] { flex: 1 1 200px; max-width: 320px }
+.sel { display: flex; align-items: center; gap: 4px }
+.sel .lab { min-width: 0 !important; white-space: nowrap }
+.sel select.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 700 }
 .chip { font: inherit; font-size: 13px; border: 1px solid transparent; background: var(--chip); color: var(--ink); padding: 3px 10px; border-radius: 999px; cursor: pointer }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg) }
 .stats { color: var(--sub); font-variant-numeric: tabular-nums }
@@ -235,14 +240,13 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
     <div class="bar">
       <div class="row"><span class="lab">表示</span><span id="fView" class="row"></span><span id="bulkBox" class="row" hidden><button class="btn main small" id="bulkSave">まとめて保存</button><button class="btn small" id="bulkUndo">保存していない変更を取り消す</button></span></div>
       <div class="row"><button class="btn main small" id="newTile">＋ 新しいタイル</button><button class="btn small" id="orderBtn">表記をそろえる注文</button><button class="btn small" id="importBtn">返事を取り込む</button></div>
-      <div class="row"><input type="search" id="q" placeholder="名前・説明で探す"></div>
-      <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
-      <div class="row"><span class="lab">種類</span><span id="fCat" class="row"></span></div>
-      <div class="row"><span class="lab">使いどころ</span><span id="fScope" class="row"></span></div>
-      <div class="row"><span class="lab">印</span><span id="fMark" class="row"></span></div>
-      <div class="row"><span class="lab">状態</span><span id="fState" class="row"></span>
-        <span class="lab" style="margin-left:auto">並び</span>
-        <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option><option value="useRate">使用率順</option><option value="pickRate">採用率順</option><option value="useWin">使った試合の勝率順</option></select></div>
+      <div class="row filters"><input type="search" id="q" placeholder="名前・説明で探す">
+        <label class="sel"><span class="lab">レアリティ</span><select id="fStar"></select></label>
+        <label class="sel"><span class="lab">種類</span><select id="fCat"></select></label>
+        <label class="sel"><span class="lab">使いどころ</span><select id="fScope"></select></label>
+        <label class="sel"><span class="lab">印</span><select id="fMark"></select></label>
+        <label class="sel"><span class="lab">状態</span><select id="fState"></select></label>
+        <label class="sel"><span class="lab">並び</span><select id="sort"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option><option value="useRate">使用率順</option><option value="pickRate">採用率順</option><option value="useWin">使った試合の勝率順</option></select></label></div>
     </div>
     <div class="grid" id="grid"></div>
     <p class="msg" id="tableHelp" hidden>横にスクロールすると全部の項目があります。オレンジの枠は、いまのゲームから変えた項目です。黄色は、まだ保存していない項目です。行の「保存」か、上の「まとめて保存」で保存されます。</p>
@@ -916,11 +920,22 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && open) 
 async function startTiles() {
   try { base = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); rebuildTiles(); }
   catch (e) { $('stats').innerHTML = '<span class="err">タイルの一覧を読み込めませんでした。開き直してください</span>'; return; }
-  chips($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
-  chips($('fCat'), Object.entries(CAT), f.cat);
-  chips($('fScope'), Object.entries(SCOPE), f.scope);
-  chips($('fMark'), ['ソロ', '自分の番だけ', '相手の番だけ', 'サイレント', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
-  chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['new', '新しいタイル'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
+  /* 絞り込みは 1 行のプルダウン（2026-10-08 ユーザー指定「ここ1行にして、それぞれプルダウンにできない？」）。どれも「すべて」か 1 つを選ぶ */
+  const pick = (el, items, set, key) => {
+    el.innerHTML = (set ? '<option value="">すべて</option>' : '') + items.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+    if (key) el.value = f[key];
+    el.onchange = () => {
+      if (key) f[key] = el.value;
+      else { set.clear(); if (el.value !== '') set.add(typeof items[0][0] === 'number' ? Number(el.value) : el.value); }
+      el.classList.toggle('on', el.value !== '' && el.value !== 'all');
+      render();
+    };
+  };
+  pick($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
+  pick($('fCat'), Object.entries(CAT), f.cat);
+  pick($('fScope'), Object.entries(SCOPE), f.scope);
+  pick($('fMark'), ['ソロ', '自分の番だけ', '相手の番だけ', 'サイレント', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
+  pick($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['new', '新しいタイル'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
   chips($('fMode'), Object.entries(MODES), fm.modes);
