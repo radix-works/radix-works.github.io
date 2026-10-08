@@ -108,6 +108,35 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .peer:hover { border-color: var(--accent) }
 .noart { display: grid; aspect-ratio: 1 / 1; border-radius: 4px; place-items: center; width: 100%; height: 100%; color: var(--sub); font-size: 13px; font-weight: 700; background: repeating-linear-gradient(45deg, var(--chip), var(--chip) 8px, var(--bg) 8px, var(--bg) 16px) }
 .flag.nw { background: #2f7d5a; color: #fff }
+.tablewrap { overflow: auto; max-height: calc(100vh - 140px); margin-block: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel) }
+#tbl { border-collapse: separate; border-spacing: 0; font-size: 13px }
+#tbl th { position: sticky; top: 0; z-index: 2; background: var(--chip); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 12px }
+#tbl td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; background: var(--panel) }
+#tbl .sx { position: sticky; z-index: 1 }
+#tbl th.sx { z-index: 3 }
+#tbl .s1 { left: 0; width: 52px; min-width: 52px }
+#tbl .s2 { left: 52px; min-width: 170px; box-shadow: 2px 0 0 var(--line) }
+#tbl .s2 input { width: 160px; font-weight: 700 }
+.tart { width: 40px; padding: 2px }
+.tart .noart { font-size: 9px }
+#tbl textarea { display: block; height: 32px; min-height: 32px; resize: none; overflow: hidden; white-space: nowrap; line-height: 1.45; padding: 5px 7px }
+#tbl tr:focus-within textarea { white-space: pre-wrap; overflow: auto }
+#tbl tr:focus-within td { background: var(--accent-soft) }
+#tbl .c-short textarea { width: 200px } #tbl .c-text textarea { width: 300px } #tbl .c-stageText textarea { width: 240px } #tbl .c-note textarea { width: 220px }
+#tbl .c-cost input { width: 4.5em }
+#tbl .c-solo, #tbl .c-quiet, #tbl .c-done { text-align: center }
+#tbl input[type=checkbox] { width: 18px; height: 18px; margin-top: 7px }
+#tbl .c-stat { white-space: nowrap; font-variant-numeric: tabular-nums }
+#tbl .c-act { position: sticky; right: 0; z-index: 1; white-space: nowrap }
+#tbl th.c-act { z-index: 3 }
+#tbl .ro { display: inline-block; padding-top: 6px; color: var(--sub); white-space: nowrap }
+#tbl td.diff input, #tbl td.diff textarea, #tbl td.diff select { border-color: var(--accent) }
+#tbl td.dirty input:not([type=checkbox]), #tbl td.dirty textarea, #tbl td.dirty select { background: var(--warn-soft) }
+#tbl td.dirty input[type=checkbox] { outline: 3px solid var(--warn); outline-offset: 1px }
+#tbl tr.dirtyrow .s2 { box-shadow: inset 4px 0 0 var(--warn), 2px 0 0 var(--line) }
+.rowmeta { display: flex; gap: 8px; align-items: center; margin-top: 3px }
+.flag-in { font-size: 11px; font-weight: 700; color: #2f7d5a }
+.lnk { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline }
 .card .sc { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700 }
 .sgrid { display: flex; flex-direction: column; gap: 4px }
 .srow { display: grid; grid-template-columns: 11em 5em 1fr; gap: 8px; align-items: baseline; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -204,6 +233,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
       <div class="msg" id="sMsg">成績を読み込み中…</div>
     </div>
     <div class="bar">
+      <div class="row"><span class="lab">表示</span><span id="fView" class="row"></span><span id="bulkBox" class="row" hidden><button class="btn main small" id="bulkSave">まとめて保存</button><button class="btn small" id="bulkUndo">保存していない変更を取り消す</button></span></div>
       <div class="row"><button class="btn main small" id="newTile">＋ 新しいタイル</button><button class="btn small" id="orderBtn">表記をそろえる注文</button><button class="btn small" id="importBtn">返事を取り込む</button></div>
       <div class="row"><input type="search" id="q" placeholder="名前・説明で探す"></div>
       <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
@@ -215,6 +245,8 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
         <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option><option value="useRate">使用率順</option><option value="pickRate">採用率順</option><option value="useWin">使った試合の勝率順</option></select></div>
     </div>
     <div class="grid" id="grid"></div>
+    <p class="msg" id="tableHelp" hidden>横にスクロールすると全部の項目があります。オレンジの枠は、いまのゲームから変えた項目です。黄色は、まだ保存していない項目です。行の「保存」か、上の「まとめて保存」で保存されます。</p>
+    <div class="tablewrap" id="tableWrap" hidden><table id="tbl"><thead></thead><tbody></tbody></table></div>
     <div class="empty" id="empty" hidden>当てはまるタイルがありません</div>
   </section>
 </div>
@@ -445,7 +477,7 @@ function rebuildTiles() {
   tiles = [...base, ...news];
   tiles.forEach((t) => { t.maxCopies = t.isNew ? MAX_COPIES[t.star] : t.maxCopies; });
 }
-const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), mark: new Set(), state: 'all', sort: 'star' };
+const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), mark: new Set(), state: 'all', sort: 'star', view: (() => { try { return localStorage.getItem('dm-admin-view') || 'card'; } catch { return 'card'; } })() };
 const urls = new Map();
 const artHtml = (t, lazy) => t.svg ? `<img alt="" ${lazy ? 'loading="lazy" ' : ''}src="${artUrl(t)}">` : '<span class="noart">絵なし</span>';
 const artUrl = (t) => { if (!urls.has(t.id)) urls.set(t.id, URL.createObjectURL(new Blob([t.svg], { type: 'image/svg+xml' }))); return urls.get(t.id); };
@@ -530,6 +562,109 @@ function computeStats() {
 const pct = (a, b) => b ? Math.round((a / b) * 1000) / 10 : null;
 const statOf = (t) => { const s = st[t.id] || { d: 0, dw: 0, u: 0, uw: 0, n: 0 }; return { ...s, useRate: pct(s.u, stGames), pickRate: pct(s.d, stGames), useWin: pct(s.uw, s.u), deckWin: pct(s.dw, s.d), idleWin: pct(s.dw - s.uw, s.d - s.u) }; };
 const fmtPct = (v) => v === null ? '―' : `${v}%`;
+/* ---------- 一覧で編集（2026-10-08 ユーザー指定「一つのタイルを1行表示にして、横スクロール前提で、全項目変更可能。左に絵と名前は固定列で、入力中は行が開くけれど基本一行、保存を押したら保持される（一括保存も対応）」） ----------
+ * 打った値は pending に持ち、行の「保存」か「まとめて保存」で adminTiles に書く。保存するまでは、絞り込みを変えても消えない
+ */
+let pending = {};
+const TCOLS = [['star', 'レアリティ', 'star'], ['cost', 'コスト', 'num'], ['short', '札の短い説明', 'area'], ['text', '効果（全文・対戦）', 'area'], ['stageText', '効果（ステージ用の文）', 'area'],
+  ['solo', 'ソロ', 'check'], ['quiet', 'サイレント', 'check'], ['when', '出せる番', WHEN], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '対象', TARGET], ['note', 'メモ', 'area'], ['done', '見直し済み', 'check']];
+const savedVal = (t, k) => k === 'note' ? (edits[t.id]?.note || '') : k === 'done' ? !!edits[t.id]?.done : k === 'targetKind' ? t.targetKind : val(t, k);
+const cur = (t, k) => pending[t.id] && k in pending[t.id] ? pending[t.id][k] : savedVal(t, k);
+const kindOf = (k) => k === 'name' ? 'text' : TCOLS.find((c) => c[0] === k)[2];
+function cellInput(t, k, kind) {
+  const v = cur(t, k), d = `data-id="${esc(t.id)}" data-k="${k}" aria-label="${esc((TCOLS.find((c) => c[0] === k) || [0, '名前'])[1])}"`;
+  if (k === 'targetKind' && !t.isNew) return `<span class="ro">${esc(TARGET[v] || '―')}</span>`;
+  if (kind === 'text') return `<input type="text" ${d} value="${esc(v)}">`;
+  if (kind === 'area') return `<textarea rows="1" ${d}>${esc(v)}</textarea>`;
+  if (kind === 'star') return `<select ${d}>${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n == v ? ' selected' : ''}>${stars(n)}</option>`).join('')}</select>`;
+  if (kind === 'num') return `<input type="number" min="0" max="20" ${d} value="${esc(v)}">`;
+  if (kind === 'check') return `<input type="checkbox" ${d}${v ? ' checked' : ''}>`;
+  return `<select ${d}>${Object.entries(kind).map(([o, l]) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+}
+const cellCls = (t, k) => `${!t.isNew && FIELDS.includes(k) && cur(t, k) !== t[k] ? ' diff' : ''}${pending[t.id] && k in pending[t.id] ? ' dirty' : ''}`;
+function rowHtml(t) {
+  const r = statOf(t);
+  return `<tr data-row="${esc(t.id)}"${pending[t.id] ? ' class="dirtyrow"' : ''}>
+    <td class="sx s1"><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
+    <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}<button class="lnk" data-open="${esc(t.id)}">詳しく</button></div></td>
+    ${TCOLS.map(([k, , kind]) => `<td class="c-${k}${cellCls(t, k)}">${cellInput(t, k, kind)}</td>`).join('')}
+    <td class="c-stat">${stGames ? `${fmtPct(r.useRate)}<br><span class="msg">勝率 ${fmtPct(r.useWin)}</span>` : '―'}</td>
+    <td class="c-act"><button class="btn small main" data-save="${esc(t.id)}"${pending[t.id] ? '' : ' disabled'}>保存</button></td></tr>`;
+}
+function renderTable(list) {
+  $('tbl').tHead.innerHTML = `<tr><th class="sx s1">絵</th><th class="sx s2">名前</th>${TCOLS.map(([k, l]) => `<th class="c-${k}">${l}</th>`).join('')}<th class="c-stat">使用率</th><th class="c-act"></th></tr>`;
+  $('tbl').tBodies[0].innerHTML = list.map(rowHtml).join('');
+  syncBulk();
+}
+function syncBulk() {
+  const n = Object.keys(pending).length;
+  $('bulkBox').hidden = f.view !== 'table' || !n;
+  $('bulkSave').textContent = `まとめて保存（${n} 枚）`;
+}
+function refreshRows() {
+  $('tbl').querySelectorAll('tbody tr').forEach((tr) => {
+    const id = tr.dataset.row, t = tiles.find((x) => x.id === id);
+    if (!t || pending[id] || tr.contains(document.activeElement)) return;
+    tr.outerHTML = rowHtml(t);
+  });
+}
+const fit = (ta) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
+function onCell(ev) {
+  const el = ev.target, id = el.dataset?.id, k = el.dataset?.k; if (!id || !k) return;
+  const t = tiles.find((x) => x.id === id); if (!t) return;
+  const kind = kindOf(k);
+  const v = kind === 'check' ? el.checked : kind === 'star' || kind === 'num' ? Number(el.value) : el.value;
+  const p = (pending[id] ||= {});
+  if (v === savedVal(t, k)) delete p[k]; else p[k] = v;
+  if (!Object.keys(p).length) delete pending[id];
+  const tr = el.closest('tr'), td = el.closest('td');
+  td.className = td.className.replace(/ ?(diff|dirty)/g, '') + cellCls(t, k);
+  tr.classList.toggle('dirtyrow', !!pending[id]);
+  tr.querySelector('[data-save]').disabled = !pending[id];
+  if (k === 'star') tr.querySelector('.tart').setAttribute('style', rimVars(Number(v)));
+  if (el.tagName === 'TEXTAREA') fit(el);
+  syncBulk();
+}
+async function saveRow(id) {
+  const t = tiles.find((x) => x.id === id); if (!t || !pending[id]) return true;
+  const doc = {};
+  if (t.isNew) {
+    FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true;
+    if (!String(doc.name).trim()) { alert('名前の無いタイルは保存できません'); return false; }
+  } else FIELDS.forEach((k) => { const v = cur(t, k); if (v !== t[k]) doc[k] = v; });
+  const note = String(cur(t, 'note')).trim(); if (note) doc.note = note;
+  if (cur(t, 'done')) doc.done = true;
+  const ref = FB.doc(FB.db, 'adminTiles', id);
+  if (Object.keys(doc).length) await FB.setDoc(ref, { ...doc, updatedAt: Date.now() }); else await FB.deleteDoc(ref);
+  delete pending[id];
+  return true;
+}
+function startTable() {
+  chips($('fView'), [['card', 'カード'], ['table', '一覧で編集']], null, 'view');
+  [...$('fView').children].forEach((b) => { const o = b.onclick; b.onclick = () => { o(); try { localStorage.setItem('dm-admin-view', f.view); } catch {} syncBulk(); }; });
+  const tb = $('tbl');
+  tb.addEventListener('input', onCell); tb.addEventListener('change', onCell);
+  tb.addEventListener('focusin', (ev) => { if (ev.target.tagName === 'TEXTAREA') ev.target.closest('tr').querySelectorAll('textarea').forEach(fit); });
+  tb.addEventListener('focusout', (ev) => { const tr = ev.target.closest('tr'); setTimeout(() => { if (tr && !tr.contains(document.activeElement)) tr.querySelectorAll('textarea').forEach((x) => { x.style.height = ''; }); }, 0); });
+  tb.addEventListener('click', async (ev) => {
+    const o = ev.target.closest('[data-open]'); if (o) { openSheet(o.dataset.open); return; }
+    const b = ev.target.closest('[data-save]'); if (!b) return;
+    b.disabled = true; b.textContent = '保存中…';
+    try { if (await saveRow(b.dataset.save)) render(); else { b.disabled = false; b.textContent = '保存'; } }
+    catch (e) { alert(`保存できませんでした（${e.code || e.message}）`); b.disabled = false; b.textContent = '保存'; }
+  });
+  $('bulkSave').onclick = async () => {
+    const ids = Object.keys(pending); $('bulkSave').disabled = true; let done = 0;
+    try { for (const id of ids) { $('bulkSave').textContent = `保存中…（${done}/${ids.length}）`; if (await saveRow(id)) done++; } }
+    catch (e) { alert(`途中で保存できませんでした（${e.code || e.message}）。保存できたのは ${done} 枚です`); }
+    $('bulkSave').disabled = false; render();
+  };
+  $('bulkUndo').onclick = async () => {
+    if (!(await ask('保存していない変更を取り消しますか', [`${Object.keys(pending).length} 枚ぶんの、まだ保存していない変更を元に戻します。`], '取り消す'))) return;
+    pending = {}; render();
+  };
+  window.addEventListener('beforeunload', (ev) => { if (Object.keys(pending).length) { ev.preventDefault(); ev.returnValue = ''; } });
+}
 function render() {
   const q = f.q.trim();
   const list = tiles.filter((t) => {
@@ -556,7 +691,8 @@ function render() {
     pickRate: (a, b) => (statOf(b).pickRate ?? -1) - (statOf(a).pickRate ?? -1),
     useWin: (a, b) => (statOf(b).useWin ?? -1) - (statOf(a).useWin ?? -1) || statOf(b).u - statOf(a).u,
   }[f.sort]);
-  $('grid').innerHTML = list.map((t) => {
+  $('grid').hidden = f.view === 'table'; $('tableWrap').hidden = f.view !== 'table'; $('tableHelp').hidden = f.view !== 'table';
+  if (f.view === 'table') renderTable(list); else $('grid').innerHTML = list.map((t) => {
     const e = edits[t.id] || {}, s = Number(val(t, 'star'));
     const flag = t.isNew ? '<span class="flag nw">新しいタイル</span>' : changedKeys(t).length ? '<span class="flag ch">変更あり</span>' : e.done ? '<span class="flag ok">確認済み</span>' : '';
     return `<button class="card" data-id="${esc(t.id)}">${flag}
@@ -792,12 +928,15 @@ async function startTiles() {
   $('sPeriod').addEventListener('change', (ev) => { fm.period = Number(ev.target.value); computeStats(); });
   $('sReload').onclick = loadStats;
   $('newTile').onclick = () => openSheet(null, blankTile());
+  startTable();
   $('orderBtn').onclick = openOrder;
   $('importBtn').onclick = openImport;
   render();
   loadStats();
   FB.onSnapshot(FB.collection(FB.db, 'adminTiles'), (snap) => {
-    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; rebuildTiles(); render();
+    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; rebuildTiles();
+    // 一覧で編集のときに打っている途中なら、行を作り直さない（打っている文字と位置を守る）
+    if (f.view === 'table' && document.activeElement?.closest('#tbl')) refreshRows(); else render();
   }, (e) => { $('stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
 }
 </script>
