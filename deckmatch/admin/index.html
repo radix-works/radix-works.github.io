@@ -120,7 +120,8 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 #tbl .sx { position: sticky; z-index: 1 }
 #tbl th.sx { z-index: 3 }
 #tbl .s1 { left: 0; width: 52px; min-width: 52px }
-#tbl .s2 { left: 52px; min-width: 170px; box-shadow: 2px 0 0 var(--line) }
+#tbl .s2 { left: 52px; min-width: 170px }
+#tbl .s3 { left: var(--s3left, 224px); min-width: 56px; text-align: center; box-shadow: 2px 0 0 var(--line); font-size: 11px; line-height: 1.2 }
 #tbl .s2 input { width: 160px; font-weight: 700 }
 .tart { width: 40px; padding: 2px }
 .tart .noart { font-size: 9px }
@@ -138,7 +139,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 #tbl td.diff input, #tbl td.diff textarea, #tbl td.diff select { border-color: var(--accent) }
 #tbl td.dirty input:not([type=checkbox]), #tbl td.dirty textarea, #tbl td.dirty select { background: var(--warn-soft) }
 #tbl td.dirty input[type=checkbox] { outline: 3px solid var(--warn); outline-offset: 1px }
-#tbl tr.dirtyrow .s2 { box-shadow: inset 4px 0 0 var(--warn), 2px 0 0 var(--line) }
+#tbl tr.dirtyrow .s2 { box-shadow: inset 4px 0 0 var(--warn) }
 .rowmeta { display: flex; gap: 8px; align-items: center; margin-top: 3px }
 .flag-in { font-size: 11px; font-weight: 700; color: #2f7d5a }
 .lnk { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline }
@@ -571,12 +572,12 @@ const fmtPct = (v) => v === null ? '―' : `${v}%`;
  */
 let pending = {};
 const TCOLS = [['star', 'レアリティ', 'star'], ['cost', 'コスト', 'num'], ['short', '札の短い説明', 'area'], ['text', '効果（全文・対戦）', 'area'], ['stageText', '効果（ステージ用の文）', 'area'],
-  ['solo', 'ソロ', 'check'], ['quiet', 'サイレント', 'check'], ['when', '出せる番', WHEN], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '対象', TARGET], ['note', 'メモ', 'area'], ['done', '見直し済み', 'check']];
+  ['solo', 'ソロ', 'check'], ['quiet', 'サイレント', 'check'], ['when', '出せる番', WHEN], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '対象', TARGET], ['note', 'メモ', 'area']];
 const savedVal = (t, k) => k === 'note' ? (edits[t.id]?.note || '') : k === 'done' ? !!edits[t.id]?.done : k === 'targetKind' ? t.targetKind : val(t, k);
 const cur = (t, k) => pending[t.id] && k in pending[t.id] ? pending[t.id][k] : savedVal(t, k);
-const kindOf = (k) => k === 'name' ? 'text' : TCOLS.find((c) => c[0] === k)[2];
+const kindOf = (k) => k === 'name' ? 'text' : k === 'done' ? 'check' : TCOLS.find((c) => c[0] === k)[2];
 function cellInput(t, k, kind) {
-  const v = cur(t, k), d = `data-id="${esc(t.id)}" data-k="${k}" aria-label="${esc((TCOLS.find((c) => c[0] === k) || [0, '名前'])[1])}"`;
+  const v = cur(t, k), d = `data-id="${esc(t.id)}" data-k="${k}" aria-label="${esc((TCOLS.find((c) => c[0] === k) || [0, k === 'done' ? '見直し済み' : '名前'])[1])}"`;
   if (k === 'targetKind' && !t.isNew) return `<span class="ro">${esc(TARGET[v] || '―')}</span>`;
   if (kind === 'text') return `<input type="text" ${d} value="${esc(v)}">`;
   if (kind === 'area') return `<textarea rows="1" ${d}>${esc(v)}</textarea>`;
@@ -591,13 +592,16 @@ function rowHtml(t) {
   return `<tr data-row="${esc(t.id)}"${pending[t.id] ? ' class="dirtyrow"' : ''}>
     <td class="sx s1"><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
     <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}<button class="lnk" data-open="${esc(t.id)}">詳しく</button></div></td>
+    <td class="sx s3 c-done${cellCls(t, 'done')}">${cellInput(t, 'done', 'check')}</td>
     ${TCOLS.map(([k, , kind]) => `<td class="c-${k}${cellCls(t, k)}">${cellInput(t, k, kind)}</td>`).join('')}
     <td class="c-stat">${stGames ? `${fmtPct(r.useRate)}<br><span class="msg">勝率 ${fmtPct(r.useWin)}</span>` : '―'}</td>
     <td class="c-act"><button class="btn small main" data-save="${esc(t.id)}"${pending[t.id] ? '' : ' disabled'}>保存</button></td></tr>`;
 }
 function renderTable(list) {
-  $('tbl').tHead.innerHTML = `<tr><th class="sx s1">絵</th><th class="sx s2">名前</th>${TCOLS.map(([k, l]) => `<th class="c-${k}">${l}</th>`).join('')}<th class="c-stat">使用率</th><th class="c-act"></th></tr>`;
+  $('tbl').tHead.innerHTML = `<tr><th class="sx s1">絵</th><th class="sx s2">名前</th><th class="sx s3">見直し<br>済み</th>${TCOLS.map(([k, l]) => `<th class="c-${k}">${l}</th>`).join('')}<th class="c-stat">使用率</th><th class="c-act"></th></tr>`;
   $('tbl').tBodies[0].innerHTML = list.map(rowHtml).join('');
+  // 3 つ目の固定列（見直し済み）は、絵と名前の列の幅のぶん右に置く
+  const h = $('tbl').tHead.rows[0].cells; $('tbl').style.setProperty('--s3left', h[0].offsetWidth + h[1].offsetWidth + 'px');
   syncBulk();
 }
 function syncBulk() {
