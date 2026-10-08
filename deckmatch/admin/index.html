@@ -143,6 +143,13 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .rowmeta { display: flex; gap: 8px; align-items: center; margin-top: 3px }
 .flag-in { font-size: 11px; font-weight: 700; color: #2f7d5a }
 .lnk { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline }
+[data-drag] { cursor: grab; touch-action: none }
+body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none }
+.dragging { opacity: .45 }
+#tbl tr.dropbefore td { box-shadow: inset 0 3px 0 var(--accent) }
+#tbl tr.dropafter td { box-shadow: inset 0 -3px 0 var(--accent) }
+.card.dropbefore { box-shadow: -4px 0 0 var(--accent) }
+.card.dropafter { box-shadow: 4px 0 0 var(--accent) }
 .card .sc { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700 }
 .sgrid { display: flex; flex-direction: column; gap: 4px }
 .srow { display: grid; grid-template-columns: 11em 5em 1fr; gap: 8px; align-items: baseline; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -479,6 +486,10 @@ const blankTile = () => ({ id: 'new-' + Date.now().toString(36) + Math.random().
 const newTileOf = (id, d) => ({ ...blankTile(), ...Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'updatedAt' && k !== 'note' && k !== 'done')), id, isNew: true, svg: '' });
 /* 新しいタイルは、作った順に一覧のいちばん上へ（2026-10-08 ユーザー指定「新しく作ったものは一番上に順番に表示されるようにしてほしい」）。順は createdAt、無ければ id に入れた作った時刻 */
 const bornAt = (t) => t.createdAt || parseInt(String(t.id).slice(4, 12), 36) || 0;
+/* 並び替えた順（2026-10-08 ユーザー指定「作成して保存したタイルを並び替えできるようにしてください。タイルの絵のあたりドラッグして入れ替える感じで」）。
+ * 並び替えると order（0, 1, 2…）を書く。まだ並び替えていないものは作った時刻なので、後から作ったものは末尾に続く */
+const orderOf = (t) => t.order ?? bornAt(t);
+const keepOrder = (id) => (edits[id]?.order !== undefined ? { order: edits[id].order } : {});
 function rebuildTiles() {
   const news = Object.entries(edits).filter(([, d]) => d.isNew).map(([id, d]) => newTileOf(id, d));
   tiles = [...base, ...news];
@@ -595,7 +606,7 @@ const cellCls = (t, k) => `${!t.isNew && FIELDS.includes(k) && cur(t, k) !== t[k
 function rowHtml(t) {
   const r = statOf(t);
   return `<tr data-row="${esc(t.id)}"${pending[t.id] ? ' class="dirtyrow"' : ''}>
-    <td class="sx s1"><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
+    <td class="sx s1"${t.isNew && !t.draft ? ` data-drag="${esc(t.id)}" title="ドラッグで並び替え"` : ''}><div class="art tart" style="${rimVars(Number(cur(t, 'star')))}">${artHtml(t, true)}</div></td>
     <td class="sx s2${cellCls(t, 'name')}">${cellInput(t, 'name', 'text')}<div class="rowmeta">${t.draft ? '<span class="flag-in">未保存の新しい行</span>' : t.isNew ? '<span class="flag-in">新しいタイル</span>' : ''}${t.draft ? `<button class="lnk" data-drop="${esc(t.id)}">この行を消す</button>` : `<button class="lnk" data-open="${esc(t.id)}">詳しく</button>${t.isNew ? `<button class="lnk" data-kill="${esc(t.id)}">消す</button>` : ''}`}</div></td>
     <td class="sx s3 c-done${cellCls(t, 'done')}">${cellInput(t, 'done', 'check')}</td>
     ${TCOLS.map(([k, , kind]) => `<td class="c-${k}${cellCls(t, k)}">${cellInput(t, k, kind)}</td>`).join('')}
@@ -644,7 +655,7 @@ async function saveRow(id) {
   const t = findTile(id); if (!t || !pending[id]) return true;
   const doc = {};
   if (t.isNew) {
-    FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now();
+    FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now(); Object.assign(doc, keepOrder(t.id));
     if (!String(doc.name).trim()) { alert('名前の無いタイルは保存できません'); return false; }
   } else FIELDS.forEach((k) => { const v = cur(t, k); if (v !== t[k]) doc[k] = v; });
   const note = String(cur(t, 'note')).trim(); if (note) doc.note = note;
@@ -717,14 +728,14 @@ function render() {
     pickRate: (a, b) => (statOf(b).pickRate ?? -1) - (statOf(a).pickRate ?? -1),
     useWin: (a, b) => (statOf(b).useWin ?? -1) - (statOf(a).useWin ?? -1) || statOf(b).u - statOf(a).u,
   }[f.sort]);
-  const born = list.filter((t) => t.isNew).sort((a, b) => bornAt(a) - bornAt(b));
+  const born = list.filter((t) => t.isNew).sort((a, b) => orderOf(a) - orderOf(b));
   list.splice(0, list.length, ...born, ...list.filter((t) => !t.isNew));
   $('grid').hidden = f.view === 'table'; $('tableWrap').hidden = f.view !== 'table'; $('tableHelp').hidden = f.view !== 'table';
   if (f.view === 'table') renderTable(list); else $('grid').innerHTML = list.map((t) => {
     const e = edits[t.id] || {}, s = Number(val(t, 'star'));
     const flag = t.isNew ? '<span class="flag nw">新しいタイル</span>' : changedKeys(t).length ? '<span class="flag ch">変更あり</span>' : e.done ? '<span class="flag ok">確認済み</span>' : '';
     return `<button class="card" data-id="${esc(t.id)}">${flag}
-      <div class="art" style="${rimVars(s)}">${artHtml(t, true)}<span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
+      <div class="art"${t.isNew ? ` data-drag="${esc(t.id)}" title="ドラッグで並び替え"` : ''} style="${rimVars(s)}">${artHtml(t, true)}<span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
       <div class="nm">${esc(val(t, 'name') || '（名前なし）')}</div><div class="sh">${esc(val(t, 'short'))}</div>
       ${stGames ? (() => { const r = statOf(t); return `<div class="sc">使用率 ${fmtPct(r.useRate)}・勝率 ${fmtPct(r.useWin)}</div>`; })() : ''}
       <div class="tags"><span class="tag">${CAT[val(t, 'category')]}</span><span class="tag">${SCOPE[val(t, 'scope')]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
@@ -732,7 +743,43 @@ function render() {
   $('empty').hidden = list.length > 0;
   $('stats').innerHTML = `全 <b>${tiles.length}</b> 枚 ・ 表示 <b>${list.length}</b> ・ 変更あり <b>${tiles.filter((t) => changedKeys(t).length).length}</b> ・ 新しいタイル <b>${tiles.filter((t) => t.isNew).length}</b> ・ 確認済み <b>${tiles.filter((t) => edits[t.id]?.done).length}</b>`;
 }
-$('grid').addEventListener('click', (ev) => { const c = ev.target.closest('.card'); if (c) openSheet(c.dataset.id); });
+$('grid').addEventListener('click', (ev) => { if (justDragged) { justDragged = false; return; } const c = ev.target.closest('.card'); if (c) openSheet(c.dataset.id); });
+/* ---------- 新しいタイルのドラッグでの並び替え（絵のところをつかむ。マウスでも指でも） ---------- */
+let drag = null, justDragged = false;
+const dragTarget = (x, y) => {
+  const el = document.elementFromPoint(x, y)?.closest('#tbl tbody tr[data-row], #grid .card');
+  const id = el?.dataset.row || el?.dataset.id;
+  const t = id && tiles.find((z) => z.id === id);
+  return t && t.isNew && id !== drag.id ? { el, id } : null;
+};
+document.addEventListener('pointerdown', (ev) => {
+  const h = ev.target.closest('[data-drag]'); if (!h || ev.button > 0) return;
+  drag = { id: h.dataset.drag, x: ev.clientX, y: ev.clientY, on: false, src: h.closest('tr, .card'), at: null };
+});
+document.addEventListener('pointermove', (ev) => {
+  if (!drag) return;
+  if (!drag.on) { if (Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 6) return; drag.on = true; drag.src.classList.add('dragging'); document.body.classList.add('dragmode'); }
+  ev.preventDefault();
+  document.querySelectorAll('.dropbefore, .dropafter').forEach((e) => e.classList.remove('dropbefore', 'dropafter'));
+  const tg = dragTarget(ev.clientX, ev.clientY); drag.at = null; if (!tg) return;
+  const r = tg.el.getBoundingClientRect();
+  const before = tg.el.tagName === 'TR' ? ev.clientY < r.top + r.height / 2 : ev.clientX < r.left + r.width / 2;
+  tg.el.classList.add(before ? 'dropbefore' : 'dropafter'); drag.at = { id: tg.id, before };
+}, { passive: false });
+document.addEventListener('pointerup', async () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  document.querySelectorAll('.dropbefore, .dropafter').forEach((e) => e.classList.remove('dropbefore', 'dropafter'));
+  d.src?.classList.remove('dragging'); document.body.classList.remove('dragmode');
+  if (!d.on) return;
+  justDragged = true; setTimeout(() => { justDragged = false; }, 0);
+  if (!d.at) return;
+  const ids = tiles.filter((t) => t.isNew).sort((a, b) => orderOf(a) - orderOf(b)).map((t) => t.id).filter((id) => id !== d.id);
+  ids.splice(ids.indexOf(d.at.id) + (d.at.before ? 0 : 1), 0, d.id);
+  try {
+    for (const [i, id] of ids.entries()) if (edits[id]?.order !== i) await FB.setDoc(FB.doc(FB.db, 'adminTiles', id), { order: i }, { merge: true });
+  } catch (e) { alert(`並び替えを保存できませんでした（${e.code || e.message}）`); }
+});
 const readField = (k, raw) => (k === 'star' || k === 'cost') ? Number(raw) : raw;
 /* 入力欄から今の値を読む（チェックは true/false） */
 const inputVal = (k) => { const el = $('e_' + k); return el.type === 'checkbox' ? el.checked : readField(k, el.value); };
@@ -802,7 +849,7 @@ function openSheet(id, draft) {
     const doc = {};
     if (fresh) {
       FIELDS.forEach((k) => { doc[k] = inputVal(k); });
-      doc.targetKind = $('e_targetKind').value; doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now();
+      doc.targetKind = $('e_targetKind').value; doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now(); Object.assign(doc, keepOrder(t.id));
       if (!String(doc.name).trim()) { $('tmsg').innerHTML = '<span class="err">名前を入れてください</span>'; return; }
     } else FIELDS.forEach((k) => { const v = inputVal(k); if (v !== t[k]) doc[k] = v; });
     const note = $('e_note').value.trim(); if (note) doc.note = note;
