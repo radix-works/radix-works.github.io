@@ -477,6 +477,8 @@ const MAX_COPIES = { 1: 3, 2: 3, 3: 3, 4: 2, 5: 1 };
  */
 const blankTile = () => ({ id: 'new-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, targetKind: 'none', svg: '' });
 const newTileOf = (id, d) => ({ ...blankTile(), ...Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'updatedAt' && k !== 'note' && k !== 'done')), id, isNew: true, svg: '' });
+/* 新しいタイルは、作った順に一覧のいちばん上へ（2026-10-08 ユーザー指定「新しく作ったものは一番上に順番に表示されるようにしてほしい」）。順は createdAt、無ければ id に入れた作った時刻 */
+const bornAt = (t) => t.createdAt || parseInt(String(t.id).slice(4, 12), 36) || 0;
 function rebuildTiles() {
   const news = Object.entries(edits).filter(([, d]) => d.isNew).map(([id, d]) => newTileOf(id, d));
   tiles = [...base, ...news];
@@ -602,7 +604,8 @@ function rowHtml(t) {
 }
 function renderTable(list) {
   $('tbl').tHead.innerHTML = `<tr><th class="sx s1">絵</th><th class="sx s2">名前</th><th class="sx s3">見直し<br>済み</th>${TCOLS.map(([k, l]) => `<th class="c-${k}">${l}</th>`).join('')}<th class="c-stat">使用率</th><th class="c-act"></th></tr>`;
-  $('tbl').tBodies[0].innerHTML = [...drafts, ...list].map(rowHtml).join('');
+  const n = list.findIndex((t) => !t.isNew), at = n < 0 ? list.length : n;
+  $('tbl').tBodies[0].innerHTML = [...list.slice(0, at), ...drafts, ...list.slice(at)].map(rowHtml).join('');
   // 3 つ目の固定列（見直し済み）は、絵と名前の列の幅のぶん右に置く
   const h = $('tbl').tHead.rows[0].cells; $('tbl').style.setProperty('--s3left', h[0].offsetWidth + h[1].offsetWidth + 'px');
   syncBulk();
@@ -640,7 +643,7 @@ async function saveRow(id) {
   const t = findTile(id); if (!t || !pending[id]) return true;
   const doc = {};
   if (t.isNew) {
-    FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true;
+    FIELDS.forEach((k) => { doc[k] = cur(t, k); }); doc.targetKind = cur(t, 'targetKind'); doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now();
     if (!String(doc.name).trim()) { alert('名前の無いタイルは保存できません'); return false; }
   } else FIELDS.forEach((k) => { const v = cur(t, k); if (v !== t[k]) doc[k] = v; });
   const note = String(cur(t, 'note')).trim(); if (note) doc.note = note;
@@ -704,6 +707,8 @@ function render() {
     pickRate: (a, b) => (statOf(b).pickRate ?? -1) - (statOf(a).pickRate ?? -1),
     useWin: (a, b) => (statOf(b).useWin ?? -1) - (statOf(a).useWin ?? -1) || statOf(b).u - statOf(a).u,
   }[f.sort]);
+  const born = list.filter((t) => t.isNew).sort((a, b) => bornAt(a) - bornAt(b));
+  list.splice(0, list.length, ...born, ...list.filter((t) => !t.isNew));
   $('grid').hidden = f.view === 'table'; $('tableWrap').hidden = f.view !== 'table'; $('tableHelp').hidden = f.view !== 'table';
   if (f.view === 'table') renderTable(list); else $('grid').innerHTML = list.map((t) => {
     const e = edits[t.id] || {}, s = Number(val(t, 'star'));
@@ -787,7 +792,7 @@ function openSheet(id, draft) {
     const doc = {};
     if (fresh) {
       FIELDS.forEach((k) => { doc[k] = inputVal(k); });
-      doc.targetKind = $('e_targetKind').value; doc.isNew = true;
+      doc.targetKind = $('e_targetKind').value; doc.isNew = true; doc.createdAt = edits[t.id]?.createdAt || bornAt(t) || Date.now();
       if (!String(doc.name).trim()) { $('tmsg').innerHTML = '<span class="err">名前を入れてください</span>'; return; }
     } else FIELDS.forEach((k) => { const v = inputVal(k); if (v !== t[k]) doc[k] = v; });
     const note = $('e_note').value.trim(); if (note) doc.note = note;
@@ -914,7 +919,7 @@ function openImport() {
       for (const r of pick) {
         const cur = { ...(edits[r.id] || {}) }; delete cur.updatedAt;
         for (const [k, c] of Object.entries(r.ch)) cur[k] = c.to;
-        if (r.t.isNew) Object.assign(cur, { ...Object.fromEntries(FIELDS.map((k) => [k, cur[k] ?? r.t[k]])), targetKind: cur.targetKind ?? r.t.targetKind, isNew: true });
+        if (r.t.isNew) Object.assign(cur, { ...Object.fromEntries(FIELDS.map((k) => [k, cur[k] ?? r.t[k]])), targetKind: cur.targetKind ?? r.t.targetKind, isNew: true, createdAt: cur.createdAt || bornAt(r.t) || Date.now() });
         else for (const k of FIELDS) if (cur[k] === r.t[k]) delete cur[k];
         if (cur.note === '') delete cur.note;
         const ref = FB.doc(FB.db, 'adminTiles', r.id);
@@ -953,9 +958,9 @@ async function startTiles() {
   $('sReload').onclick = loadStats;
   $('newTile').onclick = () => {
     if (f.view !== 'table') { openSheet(null, blankTile()); return; }
-    const t = { ...blankTile(), draft: true, maxCopies: MAX_COPIES[1] }; drafts.unshift(t); render();
-    $('tableWrap').scrollTop = 0; $('tableWrap').scrollLeft = 0;
-    $('tbl').querySelector(`tr[data-row="${t.id}"] [data-k=name]`)?.focus();
+    const t = { ...blankTile(), draft: true, maxCopies: MAX_COPIES[1] }; drafts.push(t); render();
+    $('tableWrap').scrollLeft = 0;
+    const tr = $('tbl').querySelector(`tr[data-row="${t.id}"]`); tr?.scrollIntoView({ block: 'nearest' }); tr?.querySelector('[data-k=name]')?.focus();
   };
   startTable();
   $('orderBtn').onclick = openOrder;
