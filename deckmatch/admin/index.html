@@ -106,6 +106,8 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .peers { display: flex; flex-direction: column; gap: 6px }
 .peer { font: inherit; text-align: left; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px }
 .peer:hover { border-color: var(--accent) }
+.noart { display: grid; aspect-ratio: 1 / 1; border-radius: 4px; place-items: center; width: 100%; height: 100%; color: var(--sub); font-size: 13px; font-weight: 700; background: repeating-linear-gradient(45deg, var(--chip), var(--chip) 8px, var(--bg) 8px, var(--bg) 16px) }
+.flag.nw { background: #2f7d5a; color: #fff }
 .card .sc { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700 }
 .sgrid { display: flex; flex-direction: column; gap: 4px }
 .srow { display: grid; grid-template-columns: 11em 5em 1fr; gap: 8px; align-items: baseline; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -202,6 +204,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
       <div class="msg" id="sMsg">成績を読み込み中…</div>
     </div>
     <div class="bar">
+      <div class="row"><button class="btn main small" id="newTile">＋ 新しいタイル</button><button class="btn small" id="orderBtn">表記をそろえる注文</button><button class="btn small" id="importBtn">返事を取り込む</button></div>
       <div class="row"><input type="search" id="q" placeholder="名前・説明で探す"></div>
       <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
       <div class="row"><span class="lab">種類</span><span id="fCat" class="row"></span></div>
@@ -428,9 +431,23 @@ const MARK_HELP = {
   when: '出せる番を決める。書かなければ、いつでも出せる',
   quiet: '使っても相手にエナジーが入らない（ふつうは、タイルを使うと相手にエナジーが 1 入る）。小さい効果の札を損にしないための印',
 };
-let tiles = [], edits = {}, open = null;
+let tiles = [], base = [], edits = {}, open = null, lastList = [];
+/* デッキに入る枚数はレアリティで決まる（ゲームの決まり。tiles.json から読んだ値と同じ） */
+const MAX_COPIES = { 1: 3, 2: 3, 3: 3, 4: 2, 5: 1 };
+/*
+ * **新しいタイル**（2026-10-08 ユーザー指定「タイルの作成もできるようにしてほしい。作成して保存したら追加されるやつで、絵は入らないけどほかは選択していろいろ設定できるように」）。
+ * adminTiles/{new-…} に isNew: true で、全部の項目を持って置く。ゲームに入れるのは、効果の作り込みと絵を付けてから
+ */
+const blankTile = () => ({ id: 'new-' + Date.now().toString(36), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, targetKind: 'none', svg: '' });
+const newTileOf = (id, d) => ({ ...blankTile(), ...Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'updatedAt' && k !== 'note' && k !== 'done')), id, isNew: true, svg: '' });
+function rebuildTiles() {
+  const news = Object.entries(edits).filter(([, d]) => d.isNew).map(([id, d]) => newTileOf(id, d));
+  tiles = [...base, ...news];
+  tiles.forEach((t) => { t.maxCopies = t.isNew ? MAX_COPIES[t.star] : t.maxCopies; });
+}
 const f = { q: '', star: new Set(), cat: new Set(), scope: new Set(), mark: new Set(), state: 'all', sort: 'star' };
 const urls = new Map();
+const artHtml = (t, lazy) => t.svg ? `<img alt="" ${lazy ? 'loading="lazy" ' : ''}src="${artUrl(t)}">` : '<span class="noart">絵なし</span>';
 const artUrl = (t) => { if (!urls.has(t.id)) urls.set(t.id, URL.createObjectURL(new Blob([t.svg], { type: 'image/svg+xml' }))); return urls.get(t.id); };
 const val = (t, k) => { const e = edits[t.id]; return e && e[k] !== undefined ? e[k] : t[k]; };
 const changedKeys = (t) => { const e = edits[t.id]; return e ? FIELDS.filter((k) => e[k] !== undefined && e[k] !== t[k]) : []; };
@@ -522,12 +539,15 @@ function render() {
     if (f.scope.size && !f.scope.has(val(t, 'scope'))) return false;
     if (f.mark.size) { const m = marks(t); if (![...f.mark].some((x) => x === 'なし' ? !m.length : m.includes(x))) return false; }
     if (f.state === 'changed' && !changedKeys(t).length) return false;
+    if (f.state === 'new' && !t.isNew) return false;
     if (f.state === 'memo' && !e.note) return false;
     if (f.state === 'done' && !e.done) return false;
     if (f.state === 'todo' && e.done) return false;
     if (q && ![val(t, 'name'), val(t, 'short'), val(t, 'text'), val(t, 'stageText'), t.name, e.note].join(' ').includes(q)) return false;
     return true;
-  }).sort({
+  });
+  lastList = list;
+  list.sort({
     star: (a, b) => val(a, 'star') - val(b, 'star') || val(a, 'cost') - val(b, 'cost'),
     cost: (a, b) => val(a, 'cost') - val(b, 'cost') || val(a, 'star') - val(b, 'star'),
     cat: (a, b) => CAT_ORDER.indexOf(val(a, 'category')) - CAT_ORDER.indexOf(val(b, 'category')) || val(a, 'star') - val(b, 'star'),
@@ -538,24 +558,25 @@ function render() {
   }[f.sort]);
   $('grid').innerHTML = list.map((t) => {
     const e = edits[t.id] || {}, s = Number(val(t, 'star'));
-    const flag = changedKeys(t).length ? '<span class="flag ch">変更あり</span>' : e.done ? '<span class="flag ok">確認済み</span>' : '';
+    const flag = t.isNew ? '<span class="flag nw">新しいタイル</span>' : changedKeys(t).length ? '<span class="flag ch">変更あり</span>' : e.done ? '<span class="flag ok">確認済み</span>' : '';
     return `<button class="card" data-id="${esc(t.id)}">${flag}
-      <div class="art" style="${rimVars(s)}"><img alt="" loading="lazy" src="${artUrl(t)}"><span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
-      <div class="nm">${esc(val(t, 'name'))}</div><div class="sh">${esc(val(t, 'short'))}</div>
+      <div class="art" style="${rimVars(s)}">${artHtml(t, true)}<span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
+      <div class="nm">${esc(val(t, 'name') || '（名前なし）')}</div><div class="sh">${esc(val(t, 'short'))}</div>
       ${stGames ? (() => { const r = statOf(t); return `<div class="sc">使用率 ${fmtPct(r.useRate)}・勝率 ${fmtPct(r.useWin)}</div>`; })() : ''}
       <div class="tags"><span class="tag">${CAT[val(t, 'category')]}</span><span class="tag">${SCOPE[val(t, 'scope')]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
   }).join('');
   $('empty').hidden = list.length > 0;
-  $('stats').innerHTML = `全 <b>${tiles.length}</b> 枚 ・ 表示 <b>${list.length}</b> ・ 変更あり <b>${tiles.filter((t) => changedKeys(t).length).length}</b> ・ 確認済み <b>${tiles.filter((t) => edits[t.id]?.done).length}</b>`;
+  $('stats').innerHTML = `全 <b>${tiles.length}</b> 枚 ・ 表示 <b>${list.length}</b> ・ 変更あり <b>${tiles.filter((t) => changedKeys(t).length).length}</b> ・ 新しいタイル <b>${tiles.filter((t) => t.isNew).length}</b> ・ 確認済み <b>${tiles.filter((t) => edits[t.id]?.done).length}</b>`;
 }
 $('grid').addEventListener('click', (ev) => { const c = ev.target.closest('.card'); if (c) openSheet(c.dataset.id); });
 const readField = (k, raw) => (k === 'star' || k === 'cost') ? Number(raw) : raw;
 /* 入力欄から今の値を読む（チェックは true/false） */
 const inputVal = (k) => { const el = $('e_' + k); return el.type === 'checkbox' ? el.checked : readField(k, el.value); };
 const shownOrig = (k, kind, orig) => kind === 'star' ? stars(orig) : kind === 'check' ? (orig ? '付いている' : '付いていない') : k === 'when' ? WHEN[orig] : k === 'category' ? CAT[orig] : k === 'scope' ? SCOPE[orig] : (orig === '' ? '（なし）' : orig);
-function openSheet(id) {
-  const t = tiles.find((x) => x.id === id); if (!t) return;
-  open = id; const e = edits[id] || {};
+function openSheet(id, draft) {
+  const t = draft || tiles.find((x) => x.id === id); if (!t) return;
+  id = t.id; open = id; const e = edits[id] || {};
+  const fresh = !!t.isNew;
   const fld = (k, label, kind) => {
     const v = val(t, k), orig = t[k];
     const input = kind === 'area' ? `<textarea id="e_${k}" rows="3">${esc(v)}</textarea>`
@@ -565,7 +586,8 @@ function openSheet(id) {
       : kind && typeof kind === 'object' ? `<select id="e_${k}">${Object.entries(kind).map(([o, l]) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`
       : `<input type="text" id="e_${k}" value="${esc(v)}">`;
     const help = MARK_HELP[k] ? `<div class="was">${esc(MARK_HELP[k])}</div>` : '';
-    return `<div class="fld">${kind === 'check' ? '' : `<label for="e_${k}">${label}</label>`}${input}${help}<div class="was">いまのゲーム：${esc(shownOrig(k, typeof kind === 'string' ? kind : 'select', orig))}</div></div>`;
+    const was = fresh ? '' : `<div class="was">いまのゲーム：${esc(shownOrig(k, typeof kind === 'string' ? kind : 'select', orig))}</div>`;
+    return `<div class="fld">${kind === 'check' ? '' : `<label for="e_${k}">${label}</label>`}${input}${help}${was}</div>`;
   };
   /* 見比べる：同じ種類・同じレアリティのほかの札 */
   const peers = tiles.filter((x) => x.id !== t.id && val(x, 'category') === val(t, 'category') && val(x, 'star') === val(t, 'star'))
@@ -573,8 +595,8 @@ function openSheet(id) {
   const peerHtml = peers.length ? peers.map((x) => `<button class="peer" data-peer="${esc(x.id)}"><b>${esc(val(x, 'name'))}</b><span class="pc">コスト ${esc(x.costLabel && edits[x.id]?.cost === undefined ? x.costLabel : val(x, 'cost'))}</span><span class="ps">${esc(val(x, 'short'))}</span>${marks(x).length ? `<span class="pm">${marks(x).join('・')}</span>` : ''}</button>`).join('') : '<p class="msg">ありません</p>';
   $('layer').innerHTML = `<div class="shade" id="shade"></div>
   <div class="sheet" role="dialog" aria-modal="true">
-    <div class="top"><div class="art" style="${rimVars(t.star)}"><img alt="" src="${artUrl(t)}"></div>
-      <div><h2>${esc(t.name)}</h2><div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>対象：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
+    <div class="top"><div class="art" style="${rimVars(t.star)}">${artHtml(t)}</div>
+      <div><h2>${esc(t.name || (draft ? '新しいタイル' : '（名前なし）'))}</h2>${fresh ? '<p class="msg" style="margin:4px 0">新しいタイルです。保存すると一覧に加わります。ゲームに入れるときは、効果の作り込みと絵を付けます</p>' : ''}<div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>対象：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
     <h3 class="sec">成績（${fm.period ? `この ${fm.period} 日` : 'ぜんぶ'}・選んでいる戦い ${stGames.toLocaleString()} 試合）</h3>
     ${(() => { const r = statOf(t); const row = (l, v, n) => `<div class="srow"><span>${l}</span><b>${v}</b><span class="msg">${n}</span></div>`;
       return stGames ? `<div class="sgrid">
@@ -594,21 +616,31 @@ function openSheet(id) {
     <div class="two">${fld('when', '出せる番', WHEN)}<div></div></div>
     <h3 class="sec">分類</h3>
     <div class="two">${fld('category', '種類', CAT)}${fld('scope', '使いどころ', SCOPE)}</div>
+    ${fresh ? `<div class="two">${fld('targetKind', '対象（何を選んで使うか）', TARGET)}<div></div></div>` : ''}
     <h3 class="sec">メモ</h3>
     <div class="fld"><label for="e_note">メモ（効果の中身を変えたいとき・相談したいことなど）</label><textarea id="e_note" rows="3">${esc(e.note || '')}</textarea></div>
     <h3 class="sec">見比べる（同じ種類・同じレアリティのほかの札 ${peers.length} 枚）</h3>
     <div class="peers">${peerHtml}</div>
     <div class="acts"><label class="chk"><input type="checkbox" id="e_done"${e.done ? ' checked' : ''}> 見直し済み</label><span style="flex:1"></span><span class="msg" id="tmsg"></span>
-      <button class="btn" id="b_reset">元に戻す</button><button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
+      ${fresh ? (draft ? '' : '<button class="btn" id="b_del">このタイルを消す</button>') : '<button class="btn" id="b_reset">元に戻す</button>'}<button class="btn" id="b_close">閉じる</button><button class="btn main" id="b_save">保存</button></div>
   </div>`;
-  const mark = () => FIELDS.forEach((k) => { $('e_' + k).closest('.fld').classList.toggle('changed', inputVal(k) !== t[k]); });
+  const mark = () => { if (!fresh) FIELDS.forEach((k) => { $('e_' + k).closest('.fld').classList.toggle('changed', inputVal(k) !== t[k]); }); };
   FIELDS.forEach((k) => { $('e_' + k).addEventListener('input', mark); $('e_' + k).addEventListener('change', mark); }); mark();
   document.querySelectorAll('[data-peer]').forEach((b) => b.onclick = () => openSheet(b.dataset.peer));
   $('shade').onclick = closeSheet; $('b_close').onclick = closeSheet;
-  $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
+  if ($('b_del')) $('b_del').onclick = async () => {
+    if (!(await ask('このタイルを消しますか', [`「${val(t, 'name') || '（名前なし）'}」`, '新しく作ったタイルを、一覧から消します。元に戻せません。'], '消す'))) return;
+    try { await FB.deleteDoc(FB.doc(FB.db, 'adminTiles', t.id)); closeSheet(); }
+    catch (err) { $('tmsg').innerHTML = `<span class="err">消せませんでした（${esc(err.code || err.message)}）</span>`; }
+  };
+  if ($('b_reset')) $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
   $('b_save').onclick = async () => {
     const doc = {};
-    FIELDS.forEach((k) => { const v = inputVal(k); if (v !== t[k]) doc[k] = v; });
+    if (fresh) {
+      FIELDS.forEach((k) => { doc[k] = inputVal(k); });
+      doc.targetKind = $('e_targetKind').value; doc.isNew = true;
+      if (!String(doc.name).trim()) { $('tmsg').innerHTML = '<span class="err">名前を入れてください</span>'; return; }
+    } else FIELDS.forEach((k) => { const v = inputVal(k); if (v !== t[k]) doc[k] = v; });
     const note = $('e_note').value.trim(); if (note) doc.note = note;
     if ($('e_done').checked) doc.done = true;
     $('b_save').disabled = true; $('tmsg').textContent = '保存中…';
@@ -620,25 +652,152 @@ function openSheet(id) {
   };
 }
 function closeSheet() { open = null; $('layer').innerHTML = ''; }
+
+/* ---------- 表記をそろえる注文（2026-10-08 ユーザー指定「変更ありのものなどの変更された文章やメモなどを参照して、同じような表記や効果のものの表記ゆれを統一する注文ができるようにしてほしい」） ----------
+ * 注文文を作ってコピーし、Claude に貼る。Claude は「返事を取り込む」に貼れる形（IMPORT_HEAD … IMPORT_TAIL の中に JSON）で返す。
+ * 取り込むと、項目ごとの前後を見比べてから、選んだタイルだけ adminTiles に書く
+ */
+const IMPORT_HEAD = '<<<デックマッチ取り込み', IMPORT_TAIL = 'デックマッチ取り込み>>>';
+const ORDER_SETS = { touched: '変更ありとメモありと新しいタイル', changed: '変更ありのタイル', memo: 'メモありのタイル', new: '新しいタイル', shown: 'いま一覧に出ているタイル', all: '全部のタイル' };
+const orderTargets = (k) => k === 'shown' ? lastList : tiles.filter((t) => {
+  const e = edits[t.id] || {};
+  return k === 'all' || (k === 'changed' && changedKeys(t).length) || (k === 'memo' && e.note) || (k === 'new' && t.isNew)
+    || (k === 'touched' && (changedKeys(t).length || e.note || t.isNew));
+});
+function tileLines(t) {
+  const e = edits[t.id] || {};
+  const line = (label, k) => { const v = val(t, k); const was = !t.isNew && v !== t[k] && t[k] ? `（いまのゲーム：${t[k]}）` : ''; return v || was ? `  ${label}：${v || '（なし）'}${was}` : ''; };
+  return [
+    `■ ${val(t, 'name') || '（名前なし）'}［id: ${t.id}］${t.isNew ? '（新しいタイル）' : ''} ${stars(val(t, 'star'))}・コスト ${val(t, 'cost')}・${CAT[val(t, 'category')]}・${SCOPE[val(t, 'scope')]}・対象：${TARGET[t.targetKind] || '―'}${marks(t).length ? '・印：' + marks(t).join('・') : ''}`,
+    line('短い説明', 'short'), line('効果', 'text'), line('ステージ用の文', 'stageText'),
+    e.note ? `  メモ：${e.note}` : '',
+  ].filter(Boolean).join('\n');
+}
+function orderText(kind, ask) {
+  const list = orderTargets(kind);
+  return [
+    '【デックマッチ管理画面からの注文】',
+    `注文：${ask}`,
+    `対象：${ORDER_SETS[kind]} ${list.length} 枚（ほかのタイルの書き方は、アプリのタイルの決まり src/game/tiles.ts と見比べてください）`,
+    `返事の形：直したいタイルだけを、管理画面の「返事を取り込む」に貼れる形で返してください。${IMPORT_HEAD} と ${IMPORT_TAIL} のあいだに {"tiles":[{"id":"…","short":"…","text":"…"}]} の JSON。書ける項目は name・short・text・stageText・star・cost・category・scope・solo・when・quiet・note（新しいタイルは targetKind も）。変えない項目は書かない。直した理由は note ではなく返事の本文で説明してください`,
+    '---',
+    ...list.map(tileLines),
+  ].join('\n');
+}
+function openOrder() {
+  open = 'order';
+  $('layer').innerHTML = `<div class="shade" id="shade"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2>表記をそろえる注文</h2>
+    <p class="msg" style="margin:0">注文文を作ってコピーし、Claude との会話に貼ってください。Claude の返事は「返事を取り込む」に貼ると、見比べてから反映できます。</p>
+    <div class="fld"><label for="o_set">どのタイルについて</label><select id="o_set">${Object.entries(ORDER_SETS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><div class="was" id="o_count"></div></div>
+    <div class="fld"><label for="o_ask">注文の内容</label><textarea id="o_ask" rows="4">変更した文章とメモを見て、同じような表記や効果のタイルの書き方をそろえてください（表記ゆれの統一）。変更していないタイルでも、そろえたほうがよいものは直してください。</textarea></div>
+    <div class="fld"><label for="o_text">注文文（このままコピーされます）</label><textarea id="o_text" rows="12" readonly></textarea></div>
+    <div class="acts"><span class="msg" id="o_msg"></span><span style="flex:1"></span><button class="btn" id="o_close">閉じる</button><button class="btn main" id="o_copy">注文文をコピー</button></div>
+  </div>`;
+  const sync = () => { const k = $('o_set').value; $('o_count').textContent = `${orderTargets(k).length} 枚`; $('o_text').value = orderText(k, $('o_ask').value.trim()); };
+  $('o_set').onchange = sync; $('o_ask').oninput = sync; sync();
+  $('shade').onclick = closeSheet; $('o_close').onclick = closeSheet;
+  $('o_copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('o_text').value); $('o_msg').innerHTML = '<span class="okmsg">コピーしました。Claude との会話に貼ってください</span>'; }
+    catch { $('o_text').select(); $('o_msg').textContent = 'コピーできなかったので、注文文を選んであります。長押し（右クリック）でコピーしてください'; }
+  };
+}
+const IMPORT_KEYS = [...FIELDS, 'note', 'targetKind'];
+function parseImport(raw) {
+  const a = raw.indexOf(IMPORT_HEAD), b = raw.indexOf(IMPORT_TAIL);
+  const body = a >= 0 && b > a ? raw.slice(a + IMPORT_HEAD.length, b) : raw;
+  const data = JSON.parse(body.trim().replace(/^```(json)?/, '').replace(/```$/, ''));
+  const list = Array.isArray(data) ? data : data.tiles;
+  if (!Array.isArray(list)) throw new Error('tiles の並びがありません');
+  return list.map((x) => {
+    const id = String(x.id || '');
+    const t = tiles.find((y) => y.id === id) || (id.startsWith('new-') ? newTileOf(id, {}) : null);
+    if (!t) return { id, err: 'このタイルは見つかりません' };
+    const ch = {};
+    for (const k of IMPORT_KEYS) {
+      if (!(k in x)) continue;
+      let v = x[k];
+      if (k === 'star') v = Math.min(5, Math.max(1, Number(v) || 1));
+      else if (k === 'cost') v = Math.min(20, Math.max(0, Number(v) || 0));
+      else if (k === 'solo' || k === 'quiet') v = !!v;
+      else if (k === 'when') v = WHEN[v] !== undefined ? v : '';
+      else if (k === 'category' && !CAT[v]) continue;
+      else if (k === 'scope' && !SCOPE[v]) continue;
+      else if (k === 'targetKind' && (!t.isNew || !TARGET[v])) continue;
+      else v = String(v ?? '');
+      const now = k === 'note' ? (edits[id]?.note || '') : k === 'targetKind' ? t.targetKind : val(t, k);
+      if (v !== now) ch[k] = { from: now, to: v };
+    }
+    return { id, t, ch };
+  });
+}
+function openImport() {
+  open = 'import';
+  $('layer').innerHTML = `<div class="shade" id="shade"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2>返事を取り込む</h2>
+    <p class="msg" style="margin:0">Claude の返事を、そのまま全部貼ってください（${esc(IMPORT_HEAD)} から ${esc(IMPORT_TAIL)} まで入っていれば、ほかの文があっても大丈夫です）。</p>
+    <div class="fld"><textarea id="i_raw" rows="8" placeholder="ここに貼る"></textarea></div>
+    <div class="row"><button class="btn" id="i_read">読み取る</button><span class="msg" id="i_msg"></span></div>
+    <div class="list" id="i_list"></div>
+    <div class="acts"><span style="flex:1"></span><button class="btn" id="i_close">閉じる</button><button class="btn main" id="i_apply" disabled>選んだものを反映</button></div>
+  </div>`;
+  let rows = [];
+  const label = { name: '名前', short: '短い説明', text: '効果', stageText: 'ステージ用の文', star: 'レアリティ', cost: 'コスト', category: '種類', scope: '使いどころ', solo: 'ソロ', when: '出せる番', quiet: 'サイレント', note: 'メモ', targetKind: '対象' };
+  const show = (k, v) => k === 'star' ? stars(v) : k === 'solo' || k === 'quiet' ? (v ? '付ける' : '付けない') : k === 'when' ? WHEN[v] : k === 'category' ? CAT[v] : k === 'scope' ? SCOPE[v] : k === 'targetKind' ? TARGET[v] : (v === '' ? '（なし）' : v);
+  $('i_read').onclick = () => {
+    try { rows = parseImport($('i_raw').value); }
+    catch (e) { $('i_msg').innerHTML = `<span class="err">読み取れませんでした（${esc(e.message)}）</span>`; $('i_list').innerHTML = ''; $('i_apply').disabled = true; return; }
+    const ok = rows.filter((r) => r.t && Object.keys(r.ch).length);
+    $('i_msg').textContent = `${ok.length} 枚に変更があります${rows.length - ok.length ? `（変更なし・見つからない ${rows.length - ok.length} 枚）` : ''}`;
+    $('i_list').innerHTML = rows.map((r, i) => r.err ? `<div class="item"><b>${esc(r.id)}</b><span class="err">${esc(r.err)}</span></div>`
+      : !Object.keys(r.ch).length ? '' : `<div class="item"><label class="chk"><input type="checkbox" data-row="${i}" checked> ${esc(val(r.t, 'name') || r.ch.name?.to || '（名前なし）')}${r.t.isNew ? '（新しいタイル）' : ''}</label>
+        ${Object.entries(r.ch).map(([k, c]) => `<div class="meta"><b>${label[k]}</b>：<s>${esc(show(k, c.from))}</s> → <span class="okmsg">${esc(show(k, c.to))}</span></div>`).join('')}</div>`).join('');
+    $('i_apply').disabled = !ok.length;
+  };
+  $('shade').onclick = closeSheet; $('i_close').onclick = closeSheet;
+  $('i_apply').onclick = async () => {
+    const pick = [...document.querySelectorAll('[data-row]')].filter((c) => c.checked).map((c) => rows[Number(c.dataset.row)]);
+    if (!pick.length) return;
+    $('i_apply').disabled = true; $('i_msg').textContent = '反映しています…';
+    try {
+      for (const r of pick) {
+        const cur = { ...(edits[r.id] || {}) }; delete cur.updatedAt;
+        for (const [k, c] of Object.entries(r.ch)) cur[k] = c.to;
+        if (r.t.isNew) Object.assign(cur, { ...Object.fromEntries(FIELDS.map((k) => [k, cur[k] ?? r.t[k]])), targetKind: cur.targetKind ?? r.t.targetKind, isNew: true });
+        else for (const k of FIELDS) if (cur[k] === r.t[k]) delete cur[k];
+        if (cur.note === '') delete cur.note;
+        const ref = FB.doc(FB.db, 'adminTiles', r.id);
+        if (Object.keys(cur).length) await FB.setDoc(ref, { ...cur, updatedAt: Date.now() }); else await FB.deleteDoc(ref);
+      }
+      $('i_msg').innerHTML = `<span class="okmsg">${pick.length} 枚に反映しました</span>`;
+      $('i_list').innerHTML = '';
+    } catch (e) { $('i_msg').innerHTML = `<span class="err">反映できませんでした（${esc(e.code || e.message)}）</span>`; $('i_apply').disabled = false; }
+  };
+}
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && open) closeSheet(); });
 async function startTiles() {
-  try { tiles = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); }
+  try { base = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); rebuildTiles(); }
   catch (e) { $('stats').innerHTML = '<span class="err">タイルの一覧を読み込めませんでした。開き直してください</span>'; return; }
   chips($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
   chips($('fCat'), Object.entries(CAT), f.cat);
   chips($('fScope'), Object.entries(SCOPE), f.scope);
   chips($('fMark'), ['ソロ', '自分の番だけ', '相手の番だけ', 'サイレント', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
-  chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
+  chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['new', '新しいタイル'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
   chips($('fMode'), Object.entries(MODES), fm.modes);
   [...$('fMode').children].forEach((b) => { const o = b.onclick; b.onclick = () => { o(); computeStats(); }; });
   $('sPeriod').addEventListener('change', (ev) => { fm.period = Number(ev.target.value); computeStats(); });
   $('sReload').onclick = loadStats;
+  $('newTile').onclick = () => openSheet(null, blankTile());
+  $('orderBtn').onclick = openOrder;
+  $('importBtn').onclick = openImport;
   render();
   loadStats();
   FB.onSnapshot(FB.collection(FB.db, 'adminTiles'), (snap) => {
-    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; render();
+    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; rebuildTiles(); render();
   }, (e) => { $('stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
 }
 </script>
