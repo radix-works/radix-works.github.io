@@ -106,6 +106,11 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .peers { display: flex; flex-direction: column; gap: 6px }
 .peer { font: inherit; text-align: left; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px }
 .peer:hover { border-color: var(--accent) }
+.card .sc { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700 }
+.sgrid { display: flex; flex-direction: column; gap: 4px }
+.srow { display: grid; grid-template-columns: 11em 5em 1fr; gap: 8px; align-items: baseline; border-bottom: 1px dashed var(--line); padding: 3px 0 }
+.srow b { font-variant-numeric: tabular-nums; text-align: right }
+.srow .msg { margin: 0; font-size: 12px }
 .peer .pc { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums }
 .peer .ps, .peer .pm { grid-column: 1 / -1; font-size: 13px; color: var(--sub) }
 .peer .pm { font-size: 12px }
@@ -190,6 +195,13 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
   <section class="page" id="tab-tiles" hidden>
     <div class="stats" id="stats">読み込み中…</div>
     <div class="bar">
+      <div class="row"><span class="lab">成績の期間</span>
+        <select id="sPeriod" aria-label="成績の期間"><option value="7">7 日</option><option value="30" selected>30 日</option><option value="90">90 日</option><option value="0">ぜんぶ</option></select>
+        <span class="lab">戦い</span><span id="fMode" class="row"></span>
+        <button class="btn small" id="sReload">読み直す</button></div>
+      <div class="msg" id="sMsg">成績を読み込み中…</div>
+    </div>
+    <div class="bar">
       <div class="row"><input type="search" id="q" placeholder="名前・説明で探す"></div>
       <div class="row"><span class="lab">レアリティ</span><span id="fStar" class="row"></span></div>
       <div class="row"><span class="lab">種類</span><span id="fCat" class="row"></span></div>
@@ -197,7 +209,7 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
       <div class="row"><span class="lab">印</span><span id="fMark" class="row"></span></div>
       <div class="row"><span class="lab">状態</span><span id="fState" class="row"></span>
         <span class="lab" style="margin-left:auto">並び</span>
-        <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option></select></div>
+        <select id="sort" aria-label="並び"><option value="star">レアリティ順</option><option value="cost">コスト順</option><option value="cat">種類順</option><option value="name">名前順</option><option value="useRate">使用率順</option><option value="pickRate">採用率順</option><option value="useWin">使った試合の勝率順</option></select></div>
     </div>
     <div class="grid" id="grid"></div>
     <div class="empty" id="empty" hidden>当てはまるタイルがありません</div>
@@ -436,6 +448,71 @@ function chips(host, items, set, key) {
     b._sync(); host.appendChild(b);
   }
 }
+/* ---------- タイルの成績（2026-10-08 ユーザー指定「使用率や使用時の勝率も入れてください！今後も使い続けたいし、参照したいです」） ----------
+ * アプリが試合ごとに matchLogs へ 1 通置く（形はアプリの src/game/matchLog.ts）。
+ * 2 日より前の日は、管理画面が matchStats/{日付} にまとめて書き、次からはまとめだけ読む（読む量を増やさないため）。
+ * まとめの形：{ day, modes: { [戦い]: { g: 試合数, w: 勝ち数, t: { [タイル]: [入れていた試合, そのうち勝ち, 使った試合, そのうち勝ち, 使った回数] } } } }
+ */
+const MODES = { random: 'ランダム', ranked: 'レーティング', friend: 'フレンド', bot: 'ランダム（相手が CPU）', cpu: 'CPU 戦', stage: 'ステージ' };
+const fm = { modes: new Set(['random', 'ranked', 'friend', 'bot']), period: 30 };
+let days = {}; // { 日付: modes }
+let st = {}; // いまの期間・戦いでの { タイル: { d, dw, u, uw, n } } と試合数
+let stGames = 0, stWins = 0;
+const jstDay = (ms) => new Date(ms + 9 * 3600_000).toISOString().slice(0, 10);
+const addDays = (day, n) => jstDay(Date.parse(day + 'T00:00:00+09:00') + n * 86400_000);
+function foldLogs(docs) {
+  const out = {};
+  for (const x of docs) {
+    const d = x.data(); if (!d.day || !MODES[d.mode]) continue;
+    const m = ((out[d.day] ||= {})[d.mode] ||= { g: 0, w: 0, t: {} });
+    const win = d.result === 'win' ? 1 : 0; m.g++; m.w += win;
+    const ids = new Set([...Object.keys(d.deck || {}), ...Object.keys(d.used || {})]);
+    for (const id of ids) {
+      const a = (m.t[id] ||= [0, 0, 0, 0, 0]);
+      if (d.deck && d.deck[id]) { a[0]++; a[1] += win; }
+      if (d.used && d.used[id]) { a[2]++; a[3] += win; a[4] += Number(d.used[id]) || 0; }
+    }
+  }
+  return out;
+}
+async function loadStats() {
+  $('sMsg').textContent = '成績を読み込み中…';
+  try {
+    const sums = await FB.getDocs(FB.collection(FB.db, 'matchStats'));
+    days = {}; let last = '';
+    sums.docs.forEach((x) => { days[x.id] = x.data().modes || {}; if (x.id > last) last = x.id; });
+    const today = jstDay(Date.now()), keepRaw = addDays(today, -1); // きのう・きょうは、遅れて届く記録があるのでまとめない
+    const from = last ? addDays(last, 1) : '0000-00-00';
+    const logs = await FB.getDocs(FB.query(FB.collection(FB.db, 'matchLogs'), FB.where('day', '>=', from)));
+    const fresh = foldLogs(logs.docs);
+    const toSave = Object.keys(fresh).filter((d) => d < keepRaw).sort();
+    for (const d of toSave) await FB.setDoc(FB.doc(FB.db, 'matchStats', d), { day: d, modes: fresh[d], at: Date.now() });
+    Object.assign(days, fresh);
+    $('sMsg').dataset.raw = String(logs.size);
+    computeStats();
+  } catch (e) { $('sMsg').innerHTML = `<span class="err">成績を読み込めませんでした（${esc(e.code || e.message)}）</span>`; }
+}
+function computeStats() {
+  const since = fm.period ? addDays(jstDay(Date.now()), -(fm.period - 1)) : '';
+  st = {}; stGames = 0; stWins = 0;
+  for (const [day, modes] of Object.entries(days)) {
+    if (day < since) continue;
+    for (const [mode, m] of Object.entries(modes)) {
+      if (!fm.modes.has(mode)) continue;
+      stGames += m.g; stWins += m.w;
+      for (const [id, a] of Object.entries(m.t || {})) {
+        const s = (st[id] ||= { d: 0, dw: 0, u: 0, uw: 0, n: 0 });
+        s.d += a[0]; s.dw += a[1]; s.u += a[2]; s.uw += a[3]; s.n += a[4];
+      }
+    }
+  }
+  $('sMsg').innerHTML = stGames ? `対象の試合 <b>${stGames.toLocaleString()}</b> 件（${fm.period ? `この ${fm.period} 日` : 'ぜんぶ'}・${[...fm.modes].map((k) => MODES[k]).join('・') || '戦いを選んでください'}）。試合が少ないうちは、数字がぶれやすいので参考にしてください`
+    : 'この期間・戦いの試合の記録はまだありません（記録はアプリの次の更新から集まります）';
+  render();
+}
+const pct = (a, b) => b ? Math.round((a / b) * 1000) / 10 : null;
+const statOf = (t) => { const s = st[t.id] || { d: 0, dw: 0, u: 0, uw: 0, n: 0 }; return { ...s, useRate: pct(s.u, stGames), pickRate: pct(s.d, stGames), useWin: pct(s.uw, s.u), deckWin: pct(s.dw, s.d), idleWin: pct(s.dw - s.uw, s.d - s.u) }; };
+const fmtPct = (v) => v === null ? '―' : `${v}%`;
 function render() {
   const q = f.q.trim();
   const list = tiles.filter((t) => {
@@ -455,6 +532,9 @@ function render() {
     cost: (a, b) => val(a, 'cost') - val(b, 'cost') || val(a, 'star') - val(b, 'star'),
     cat: (a, b) => CAT_ORDER.indexOf(val(a, 'category')) - CAT_ORDER.indexOf(val(b, 'category')) || val(a, 'star') - val(b, 'star'),
     name: (a, b) => String(val(a, 'name')).localeCompare(String(val(b, 'name')), 'ja'),
+    useRate: (a, b) => (statOf(b).useRate ?? -1) - (statOf(a).useRate ?? -1),
+    pickRate: (a, b) => (statOf(b).pickRate ?? -1) - (statOf(a).pickRate ?? -1),
+    useWin: (a, b) => (statOf(b).useWin ?? -1) - (statOf(a).useWin ?? -1) || statOf(b).u - statOf(a).u,
   }[f.sort]);
   $('grid').innerHTML = list.map((t) => {
     const e = edits[t.id] || {}, s = Number(val(t, 'star'));
@@ -462,6 +542,7 @@ function render() {
     return `<button class="card" data-id="${esc(t.id)}">${flag}
       <div class="art" style="${rimVars(s)}"><img alt="" loading="lazy" src="${artUrl(t)}"><span class="cost">${esc(t.costLabel && e.cost === undefined ? t.costLabel : val(t, 'cost'))}</span><span class="star">${stars(s)}</span></div>
       <div class="nm">${esc(val(t, 'name'))}</div><div class="sh">${esc(val(t, 'short'))}</div>
+      ${stGames ? (() => { const r = statOf(t); return `<div class="sc">使用率 ${fmtPct(r.useRate)}・勝率 ${fmtPct(r.useWin)}</div>`; })() : ''}
       <div class="tags"><span class="tag">${CAT[val(t, 'category')]}</span><span class="tag">${SCOPE[val(t, 'scope')]}</span>${marks(t).map((m) => `<span class="tag">${m}</span>`).join('')}${e.note ? '<span class="tag">メモあり</span>' : ''}</div></button>`;
   }).join('');
   $('empty').hidden = list.length > 0;
@@ -494,6 +575,17 @@ function openSheet(id) {
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="top"><div class="art" style="${rimVars(t.star)}"><img alt="" src="${artUrl(t)}"></div>
       <div><h2>${esc(t.name)}</h2><div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>対象：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
+    <h3 class="sec">成績（${fm.period ? `この ${fm.period} 日` : 'ぜんぶ'}・選んでいる戦い ${stGames.toLocaleString()} 試合）</h3>
+    ${(() => { const r = statOf(t); const row = (l, v, n) => `<div class="srow"><span>${l}</span><b>${v}</b><span class="msg">${n}</span></div>`;
+      return stGames ? `<div class="sgrid">
+        ${row('使用率', fmtPct(r.useRate), `${r.u} 試合で使った`)}
+        ${row('採用率', fmtPct(r.pickRate), `${r.d} 試合でデッキに入っていた`)}
+        ${row('使った試合の勝率', fmtPct(r.useWin), `${r.uw} 勝 / ${r.u} 試合`)}
+        ${row('入れていた試合の勝率', fmtPct(r.deckWin), `${r.dw} 勝 / ${r.d} 試合`)}
+        ${row('入れたが使わなかった試合の勝率', fmtPct(r.idleWin), `${r.dw - r.uw} 勝 / ${r.d - r.u} 試合`)}
+        ${row('1 試合で使った回数', r.u ? (Math.round((r.n / r.u) * 10) / 10) + ' 回' : '―', `使った試合での平均（全 ${r.n} 回）`)}
+        ${row('全体の勝率（くらべる用）', fmtPct(pct(stWins, stGames)), '選んでいる戦い全体')}
+      </div>${r.u < 30 ? '<p class="msg">使った試合が 30 に届かないので、勝率はぶれやすいです</p>' : ''}` : '<p class="msg">この期間・戦いの試合の記録はまだありません</p>'; })()}
     ${fld('name', '名前')}
     <div class="two">${fld('star', 'レアリティ', 'star')}${fld('cost', 'コスト', 'num')}</div>
     ${fld('short', '札の短い説明', 'area')}${fld('text', '効果（全文・対戦）', 'area')}${fld('stageText', '効果（ステージ用の文）', 'area')}
@@ -539,7 +631,12 @@ async function startTiles() {
   chips($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
+  chips($('fMode'), Object.entries(MODES), fm.modes);
+  [...$('fMode').children].forEach((b) => { const o = b.onclick; b.onclick = () => { o(); computeStats(); }; });
+  $('sPeriod').addEventListener('change', (ev) => { fm.period = Number(ev.target.value); computeStats(); });
+  $('sReload').onclick = loadStats;
   render();
+  loadStats();
   FB.onSnapshot(FB.collection(FB.db, 'adminTiles'), (snap) => {
     const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; render();
   }, (e) => { $('stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
