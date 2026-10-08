@@ -140,6 +140,13 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 #tbl td.dirty input:not([type=checkbox]), #tbl td.dirty textarea, #tbl td.dirty select { background: var(--warn-soft) }
 #tbl td.dirty input[type=checkbox] { outline: 3px solid var(--warn); outline-offset: 1px }
 #tbl tr.dirtyrow .s2 { box-shadow: inset 4px 0 0 var(--warn) }
+/* スマホでは左の固定をやめて、全部の列を一緒に横へ流す（2026-10-08 ユーザー指定「スマホで管理画面を開いてタイルの一覧表示をしたとき、左の固定をなくして全部スクロールできるようにして」） */
+@media (max-width: 700px) {
+  #tbl td.sx { position: static }
+  #tbl th.sx { left: auto }
+  #tbl .s2, #tbl .s3, #tbl tr.dirtyrow .s2 { box-shadow: none }
+  #tbl tr.dirtyrow .s1 { box-shadow: inset 4px 0 0 var(--warn) }
+}
 .rowmeta { display: flex; gap: 8px; align-items: center; margin-top: 3px }
 .flag-in { font-size: 11px; font-weight: 700; color: #2f7d5a }
 .lnk { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline }
