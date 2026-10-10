@@ -54,6 +54,25 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 .ggroup { display: flex; flex-direction: column; gap: 6px; padding-block: 6px; border-top: 1px dashed var(--line) }
 .ggroup:first-child { border-top: 0 }
 .ggroup h3 { margin: 0; font-size: 12px; color: var(--ink) }
+.gifts .lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.gifts input { width: 100% }
+/* 強化石は色 × 大きさの表（2026-10-10） */
+.stones { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 6px 8px; align-items: center }
+.stones > .lab { white-space: nowrap }
+.stones input { width: 100% }
+/* タイル・スキンを名前で探して足す（2026-10-10） */
+.pick { position: relative }
+.pick input { width: 100% }
+.pickres { position: absolute; z-index: 6; left: 0; right: 0; top: calc(100% + 2px); max-height: 320px; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px #0003 }
+.pr { display: flex; gap: 8px; align-items: center; width: 100%; font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: left; cursor: pointer }
+.pr:hover, .pr:focus-visible { background: var(--accent-soft) }
+.pkart { flex: none; width: 32px; height: 32px; border-radius: 4px; overflow: hidden; background: #0002 }
+.pkart img { display: block; width: 100%; height: 100% }
+.pkname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px }
+.picked { display: flex; flex-direction: column; gap: 4px }
+.pk { display: flex; gap: 8px; align-items: center }
+.pk input { width: 4.5em; flex: none }
+.pk .btn { flex: none }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .preview { border: 2px solid var(--ink); border-radius: 8px; background: var(--bg); padding: 12px }
@@ -459,6 +478,8 @@ async function startCat(k) {
   try {
     st.items = await (await fetch(c.json, { cache: 'no-cache' })).json();
     st.items.forEach((x) => { x.roleLabel = ROLE[x.role]; x.priceLabel2 = x.priceKind === 'coin' ? 'コイン' : x.priceKind === 'gem' ? 'ジェム' : x.priceLabel; });
+    // メールの履歴に出すスキンの名前は、この一覧を読んでから引ける（2026-10-10）
+    if (k === 'skins' && hist.length) renderHistory();
   } catch (e) { $(k + 'Stats').innerHTML = '<span class="err">一覧を読み込めませんでした。開き直してください</span>'; return; }
   // 絞り込み：図鑑・売り場と同じ並びの順に、出てくる値を並べる
   $(k + 'Sels').innerHTML = c.facets.map(([f, lab]) => {
@@ -517,22 +538,87 @@ function ask(title, lines, okLabel) {
 // 配れる物（ゲーム側の読み方は src/game/serverMail.ts、上限は firestore.rules の saneMail。2026-10-08 ユーザー指定「配るもの　が不足しすぎじゃない？」）
 const STONE_COLORS = [['crimson', '紅石'], ['azure', '青石'], ['verdant', '緑石'], ['amber', '黄石'], ['pale', '白石']];
 const STONE_SIZES = [['small', '小'], ['mid', '中'], ['large', '大']];
+/*
+ * 2026-10-10 ユーザー指定「管理画面のメールで配れるものもちゃんと整備して」：持ち物になる物を全部配れるように。
+ * スキップ券・リセット石・共通ガチャ券（1回・11回）・経験値と、決まったタイル・スキン（名前で探して足す）を足した。
+ * 強化石は色 × 大きさの表に、名前はゲームの持ち物の呼び名にそろえた。ジェムは無償のジェム（有償ジェムはメールでは配らない）
+ */
 const GIFT_GROUPS = [
   ['通貨', [['gems', 'ジェム', 100000], ['coins', 'コイン', 10000000]]],
-  ['ガチャ券', [['tileTickets', 'タイル11回ガチャ券', 100], ['skinTickets', 'スキン11回ガチャ券', 100], ['tileSingle', 'タイルガチャ券（1回）', 100], ['skinSingle', 'スキンガチャ券（1回）', 100]]],
+  ['ガチャ券', [['tileTickets', 'タイル11回ガチャ券', 100], ['skinTickets', 'スキン11回ガチャ券', 100], ['commonTickets', '共通11回ガチャ券', 100], ['tileSingle', 'タイルガチャ券', 100], ['skinSingle', 'スキンガチャ券', 100], ['commonSingle', '共通ガチャ券', 100]]],
   ['回復', [['potionSmall', '回復薬（小）', 1000], ['potionMid', '回復薬（中）', 1000], ['potionLarge', '回復薬（大）', 1000], ['stamina', 'スタミナ', 1000]]],
-  ['強化石', STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 1000]))],
-  ['そのほか', [['shards', 'スキンのかけら', 10000], ['tilePoints', 'タイルのかけら', 100000], ['medals', 'パーティーメダル', 10000], ['candy', 'キャンディ', 100000]]],
+  ['育成', [['exp', '経験値', 1000000], ['resetStones', 'リセット石', 100], ['shards', 'スキンのかけら', 10000], ['tilePoints', 'タイルのかけら', 100000]]],
+  ['そのほか', [['skipTickets', 'スキップ券', 1000], ['medals', 'パーティーメダル', 10000], ['candy', 'キャンディ', 100000]]],
 ];
-const GIFTS = GIFT_GROUPS.flatMap(([, items]) => items);
-$('giftHost').innerHTML = GIFT_GROUPS.map(([g, items]) => `<div class="ggroup"><h3>${g}</h3><div class="gifts">${items.map(([k, l, max]) => `<label class="fld"><span class="lab">${l}</span><input type="number" min="0" max="${max}" id="g_${k}"></label>`).join('')}</div></div>`).join('');
+const STONE_GIFTS = STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 1000]));
+const GIFTS = [...GIFT_GROUPS.flatMap(([, items]) => items), ...STONE_GIFTS];
+const numIn = (k, max, label) => `<input type="number" inputmode="numeric" min="0" max="${max}" id="g_${k}" aria-label="${esc(label)}">`;
+$('giftHost').innerHTML = GIFT_GROUPS.slice(0, 3).concat([['強化石']], GIFT_GROUPS.slice(3)).map(([g, items]) => items
+  ? `<div class="ggroup"><h3>${g}</h3><div class="gifts">${items.map(([k, l, max]) => `<label class="fld"><span class="lab">${l}</span>${numIn(k, max, l)}</label>`).join('')}</div></div>`
+  : `<div class="ggroup"><h3>${g}</h3><div class="stones"><span></span>${STONE_SIZES.map(([, zn]) => `<span class="lab">${zn}</span>`).join('')}${STONE_COLORS.map(([c, cn]) => `<span class="lab">${cn}</span>${STONE_SIZES.map(([z, zn]) => numIn(`stone_${c}_${z}`, 1000, `${cn}（${zn}）`)).join('')}`).join('')}</div></div>`,
+).join('') + `<div class="ggroup"><h3>タイル・スキン</h3>
+  <div class="pick"><input type="search" id="pickQ" placeholder="タイル・スキンの名前で探す" autocomplete="off"><div class="pickres" id="pickRes" hidden></div></div>
+  <div class="picked" id="picked"></div></div>`;
+
+/*
+ * 決まったタイル・スキン。メールの文書には tiles・skins を「id*数」を空白で区切った文字で入れる（アプリの src/game/serverMail.ts が読む）。
+ * タイルは 1 種 10 枚まで（持てるのは 3 枚。超えたぶんはゲームの中でタイルのかけらに換わる）、スキンは 1 種 6 つまで（2 つ目からは凸）。合わせて 30 種まで
+ */
+const PICK_MAX = { tile: 10, skin: 6 };
+let picked = []; // { kind: 'tile' | 'skin', id, n }
+const tileById = (id) => base.find((t) => t.id === id);
+const skinById = (id) => catSt.skins.items.find((x) => x.id === id);
+const pickName = (kind, id) => { const x = kind === 'tile' ? tileById(id) : skinById(id); return x ? (kind === 'tile' ? `★${x.star} ${x.name}` : `${x.name}（${x.kindLabel}）`) : id; };
+const pickArt = (kind, id) => { const x = kind === 'tile' ? tileById(id) : skinById(id); return !x ? '<span class="noart"></span>' : kind === 'tile' ? artHtml(x, true) : `<img alt="" loading="lazy" src="skin/${x.idx}.webp">`; };
+const packIds = (kind) => picked.filter((p) => p.kind === kind).map((p) => (p.n > 1 ? `${p.id}*${p.n}` : p.id)).join(' ');
+const unpackIds = (v) => String(v || '').split(/[\s,、，]+/).flatMap((x) => { const m = /^([A-Za-z0-9_.:-]+)(?:[*×](\d+))?$/.exec(x); return m ? [[m[1], m[2] ? Number(m[2]) : 1]] : []; });
+function renderPicked() {
+  $('picked').innerHTML = picked.length ? picked.map((p, i) => `<div class="pk"><span class="pkart">${pickArt(p.kind, p.id)}</span><span class="pkname">${esc(pickName(p.kind, p.id))}</span>
+    <input type="number" inputmode="numeric" min="1" max="${PICK_MAX[p.kind]}" value="${p.n}" data-pn="${i}" aria-label="数"><button class="btn small" data-px="${i}" aria-label="外す">×</button></div>`).join('')
+    : '<p class="msg" style="margin:0">まだ選んでいません</p>';
+}
+function renderPickRes() {
+  const q = $('pickQ').value.trim().toLowerCase();
+  if (!q) { $('pickRes').hidden = true; return; }
+  const hit = (x) => x.name.toLowerCase().includes(q) || x.id.toLowerCase().includes(q);
+  const rows = [
+    ...base.filter(hit).slice(0, 8).map((t) => ['tile', t.id]),
+    ...catSt.skins.items.filter((x) => x.priceKind !== 'free' && hit(x)).slice(0, 8).map((x) => ['skin', x.id]),
+  ];
+  $('pickRes').hidden = false;
+  $('pickRes').innerHTML = rows.length ? rows.map(([k, id]) => `<button type="button" class="pr" data-pk="${k}" data-pid="${esc(id)}"><span class="pkart">${pickArt(k, id)}</span><span class="pkname">${esc(pickName(k, id))}</span><span class="tag">${k === 'tile' ? 'タイル' : 'スキン'}</span></button>`).join('')
+    : `<p class="msg" style="margin:6px 8px">${base.length && catSt.skins.items.length ? '見つかりません' : '一覧を読み込み中です'}</p>`;
+}
+function startPicker() {
+  $('pickQ').addEventListener('input', renderPickRes);
+  $('pickQ').addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { $('pickQ').value = ''; renderPickRes(); } });
+  $('pickRes').onclick = (ev) => {
+    const b = ev.target.closest('[data-pk]'); if (!b) return;
+    const kind = b.dataset.pk, id = b.dataset.pid, have = picked.find((p) => p.kind === kind && p.id === id);
+    if (have) have.n = Math.min(PICK_MAX[kind], have.n + 1);
+    else if (picked.length < 30) picked.push({ kind, id, n: 1 });
+    $('pickQ').value = ''; renderPickRes(); renderPicked(); renderPreview(); $('pickQ').focus();
+  };
+  $('picked').addEventListener('input', (ev) => { const i = ev.target.dataset.pn; if (i === undefined) return; picked[i].n = Number(ev.target.value); renderPreview(); });
+  document.addEventListener('click', (ev) => { if (!ev.target.closest('.pick')) $('pickRes').hidden = true; });
+  $('pickQ').addEventListener('focus', renderPickRes);
+  $('picked').onclick = (ev) => { const b = ev.target.closest('[data-px]'); if (!b) return; picked.splice(Number(b.dataset.px), 1); renderPicked(); renderPreview(); };
+  renderPicked();
+}
+
 const fmt = (ms) => { if (typeof ms !== 'number') return ''; const d = new Date(ms); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
-const giftPills = (d) => GIFTS.filter(([k]) => d[k]).map(([k, l]) => `<span class="pill">${l} ×${Number(d[k]).toLocaleString()}</span>`).join('');
+/** 配る物を「名前 ×数」の並びに（履歴の古いメールも同じ形で読める） */
+const giftList = (d) => [
+  ...GIFTS.filter(([k]) => d[k]).map(([k, l]) => `${l} ×${Number(d[k]).toLocaleString()}`),
+  ...['tiles', 'skins'].flatMap((f) => unpackIds(d[f]).map(([id, n]) => `${pickName(f === 'tiles' ? 'tile' : 'skin', id)} ×${n}`)),
+];
+const giftPills = (d) => giftList(d).map((t) => `<span class="pill">${esc(t)}</span>`).join('');
 let target = null; // { uid, name, code }
 
 function readForm() {
   const d = { title: $('mTitle').value.trim(), text: $('mText').value.replace(/\r/g, '').trim() };
   for (const [k] of GIFTS) { const v = $('g_' + k).value.trim(); if (v !== '') d[k] = Number(v); }
+  for (const kind of ['tile', 'skin']) { const v = packIds(kind); if (v) d[kind + 's'] = v; }
   const from = $('mFrom').value, until = $('mUntil').value;
   if (from) d.from = new Date(from).getTime();
   if (until) d.until = new Date(until).getTime();
@@ -545,13 +631,14 @@ function problems(d) {
     if (d[k] !== undefined && (!Number.isInteger(d[k]) || d[k] <= 0)) p.push(`${l}は 1 以上の整数にしてください（配らないなら空に）`);
     else if (d[k] > max) p.push(`${l}は 1 通 ${max.toLocaleString()} までです`);
   }
+  for (const x of picked) if (!Number.isInteger(x.n) || x.n < 1 || x.n > PICK_MAX[x.kind]) p.push(`${pickName(x.kind, x.id)}は 1〜${PICK_MAX[x.kind]} にしてください`);
   if (d.from && d.until && d.until <= d.from) p.push('出し終わりは、出し始めより後にしてください');
   if ($('toOne').checked && !target) p.push('あて先のフレンドコードを入れてください');
   return p;
 }
 function renderPreview() {
   const d = readForm();
-  const kind = GIFTS.some(([k]) => d[k]) ? '配る物つき（メールBOXで受け取る）' : 'お知らせ（読むだけ）';
+  const kind = giftList(d).length ? '配る物つき（メールBOXで受け取る）' : 'お知らせ（読むだけ）';
   $('preview').innerHTML = `<div class="t">${esc(d.title || '（見出し）')}</div><div class="b">${(d.text || '').split('\n').filter(Boolean).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="msg">（本文なし）</p>'}</div><div class="g">${giftPills(d)}</div><p class="msg" style="margin:8px 0 0">${kind}${d.from ? '・' + fmt(d.from) + ' から' : ''}${d.until ? '・' + fmt(d.until) + ' まで' : ''}</p>`;
 }
 async function findCode(code) {
@@ -616,6 +703,7 @@ async function loadHistory() {
 }
 function startMail() {
   ['mTitle', 'mText', 'mFrom', 'mUntil', ...GIFTS.map(([k]) => 'g_' + k)].forEach((id) => $(id).addEventListener('input', renderPreview));
+  startPicker();
   renderPreview();
   const syncTo = () => { $('toCode').hidden = !$('toOne').checked; if (!$('toOne').checked) { target = null; $('toName').textContent = ''; } };
   $('toAll').onchange = syncTo; $('toOne').onchange = syncTo;
@@ -631,7 +719,7 @@ function startMail() {
     if (p.length) { $('sendMsg').innerHTML = `<span class="err">${p.map(esc).join('<br>')}</span>`; return; }
     if (!d.text) delete d.text;
     const who = target ? `${target.name}（${target.code}）だけ` : '全員';
-    const gifts = GIFTS.filter(([k]) => d[k]).map(([k, l]) => `${l} ×${d[k].toLocaleString()}`).join('、');
+    const gifts = giftList(d).join('、');
     if (!(await ask(`${who}に送りますか`, [`見出し：${d.title}`, gifts ? `配る物：${gifts}` : '配る物なし（お知らせ）', '送った内容は書き換えられません（取り消して出し直します）'], '送る'))) return;
     $('sendBtn').disabled = true; $('sendMsg').textContent = '送っています…';
     try {
@@ -639,6 +727,7 @@ function startMail() {
       await FB.addDoc(FB.collection(FB.db, ...path), { ...d, at: Date.now() });
       $('sendMsg').innerHTML = `<span class="okmsg">${esc(who)}に送りました</span>`;
       ['mTitle', 'mText', 'mFrom', 'mUntil', ...GIFTS.map(([k]) => 'g_' + k)].forEach((id) => { $(id).value = ''; });
+      picked = []; renderPicked();
       renderPreview();
       if (target) { $('lookCode').value = target.code; showOne(target); }
       loadHistory();
@@ -1276,7 +1365,7 @@ function openImport() {
 }
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && open) closeSheet(); });
 async function startTiles() {
-  try { base = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); rebuildTiles(); }
+  try { base = await (await fetch('tiles.json', { cache: 'no-cache' })).json(); rebuildTiles(); if (hist.length) renderHistory(); }
   catch (e) { $('stats').innerHTML = '<span class="err">タイルの一覧を読み込めませんでした。開き直してください</span>'; return; }
   /* 絞り込みは 1 行のプルダウン（2026-10-08 ユーザー指定「ここ1行にして、それぞれプルダウンにできない？」）。どれも「すべて」か 1 つを選ぶ */
   const pick = (el, items, set, key) => {
