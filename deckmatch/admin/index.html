@@ -131,6 +131,11 @@ input[type=search], input[type=text], input[type=number], input[type=datetime-lo
 #tbl .c-short textarea { width: 200px } #tbl .c-text textarea { width: 300px } #tbl .c-stageText textarea { width: 240px } #tbl .c-note textarea { width: 220px }
 #tbl .c-cost input { width: 4.5em }
 #tbl .c-solo, #tbl .c-quiet, #tbl .c-done { text-align: center }
+#tbl .c-aim { min-width: 250px }
+.aimed { display: flex; flex-direction: column; gap: 6px; align-items: flex-start }
+.aimrow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center }
+.aimrow select { width: auto; min-width: 0 }
+.aimsign { font-size: 12px; opacity: .75 }
 #tbl input[type=checkbox] { width: 18px; height: 18px; margin-top: 7px }
 #tbl .c-stat { white-space: nowrap; font-variant-numeric: tabular-nums }
 #tbl .c-act { position: sticky; right: 0; z-index: 1; white-space: nowrap }
@@ -475,23 +480,76 @@ const CAT = { attack: '攻め', defense: '守り', self: '整え', disrupt: '妨
 const CAT_ORDER = Object.keys(CAT);
 const SCOPE = { common: '共通', stage: 'ステージ', versus: '対戦' };
 const RIM = { 1: ['#e9e6df', '#c9c4ba', '#e2ded6', '#bdb8ad'], 2: ['#f4fbff', '#a9d8ec', '#e6f6fd', '#8fc6de'], 3: ['#f4f6f9', '#6f7b8c', '#dfe5ec', '#5d6878'], 4: ['#fff0bf', '#b88a3a', '#f1d58f', '#94691f'], 5: ['#ff9ecf', '#ffe08a', '#9ff2c8', '#8fd0ff', '#c7a4ff'] };
-const FIELDS = ['name', 'short', 'text', 'stageText', 'star', 'cost', 'solo', 'when', 'quiet', 'category', 'scope'];
-const WHEN = { '': 'いつでも', mine: '自分の番だけ', theirs: '相手の番だけ' };
+const FIELDS = ['name', 'short', 'text', 'stageText', 'star', 'cost', 'solo', 'when', 'quiet', 'category', 'scope', 'aim'];
+/* 使用条件（丸の印）。2026-10-10 の印の整理に合わせた名前（アプリの src/ui/tile/tileMarks.ts） */
+const WHEN = { '': 'どちらの番でも', mine: '自（自分のターンのみ）', theirs: '敵（相手のターンのみ）' };
 const TARGET = { none: '選ばずに使う', ownHand: '自分の手を 1 つ選ぶ', oppHand: '相手の手を 1 つ選ぶ', anyHand: 'どちらかの手を 1 つ選ぶ', split: '自分の手の本数を分け直す', pick: '小窓で選ぶ（デッキ・捨て札・数など）' };
-/* 特殊効果（印）の意味。ゲームの決まり（src/game/tiles.ts の solo・when・quiet）と同じ */
+/*
+ * 印は 3 つの区分（2026-10-10 ユーザー指定。アプリの src/ui/tile/tileMarks.ts と同じ）：
+ *   使用条件（丸）     … 自（自分のターンのみ）・敵（相手のターンのみ）
+ *   対象条件（四角）   … 自・自単・自複・自全・敵・敵単・敵複・敵全・両・両単・両複・両全・場（下の「対象」から決まる）
+ *   特殊効果（ひし形） … 静（サイレント）・唯（このターン、この札だけ）
+ */
 const MARK_HELP = {
-  solo: 'このターン、これ以外のタイルを出せない（前にも後にも）。強すぎる札の釣り合いを取る縛り',
-  when: '出せる番を決める。書かなければ、いつでも出せる',
-  quiet: '使っても相手にエナジーが入らない（ふつうは、タイルを使うと相手にエナジーが 1 入る）。小さい効果の札を損にしないための印',
+  solo: '唯：このターン、これ以外のタイルを出せない（前にも後にも）。強すぎる札の釣り合いを取る縛り',
+  when: '使用条件（丸の印）。自＝自分のターンのみ、敵＝相手のターンのみ。どちらでもよければ「どちらの番でも」',
+  quiet: '静：使っても相手にエナジーが入らない（ふつうは、タイルを使うと相手にエナジーが 1 入る）。小さい効果の札を損にしないための印',
 };
+/*
+ * **対象（何に効くか）**（2026-10-10 ユーザー指定「タイルごとに何を対象とするのかを内部的に設定」。アプリの src/game/tileAim.ts と同じ書き方）。
+ * 1 つの札に何個でも書ける。1 つぶんは「何を」「誰の」「個数（スタックだけ）」の 3 つ。
+ * 四角の印（自単・敵全・両・場 など）は、ここのスタックから決まる。スタック以外（エナジー・デッキ・ダンプ・プール）は印には出ない
+ */
+const AIM_AREA = { s: 'スタック', e: 'エナジー', d: 'デッキ', x: 'ダンプ（捨て札）', p: 'プール' };
+const AIM_SIDE = { m: '自分の', f: '相手の', b: 'お互いの' };
+const AIM_COUNT = { '': '個数を選ばない', 1: '1つ', n: '複数', a: '全て', w: 'フィールド全体' };
+const parseAimStr = (v) => String(v || '').split(/\s+/).filter(Boolean);
+/* 書き方の決まりに合わない文字は直す（個数はスタックだけ。フィールド全体はお互いのときだけ）。読めなければ空 */
+function normAimCode(c) {
+  if (!/^[sedxp][mfb][1naw]?$/.test(c)) return '';
+  if (c.length === 3 && (c[0] !== 's' || (c[2] === 'w' && c[1] !== 'b'))) return c.slice(0, 2);
+  return c;
+}
+const normAim = (v) => parseAimStr(v).map(normAimCode).filter(Boolean).join(' ');
+const aimSign = (c) => c[0] !== 's' ? '' : c[2] === 'w' ? '場' : ({ m: '自', f: '敵', b: '両' })[c[1]] + ({ 1: '単', n: '複', a: '全' }[c[2]] || '');
+const aimSigns = (v) => parseAimStr(v).map(aimSign).filter(Boolean);
+const aimLabel = (c) => `${AIM_SIDE[c[1]]}${AIM_AREA[c[0]]}${c[2] ? '・' + AIM_COUNT[c[2]] : ''}`;
+const aimText = (v) => { const l = parseAimStr(v); return l.length ? l.map(aimLabel).join('、') + (aimSigns(v).length ? `（四角の印：${aimSigns(v).join(' ')}）` : '') : '（なし）'; };
+const aimOpts = (o, cur) => Object.entries(o).map(([k, l]) => `<option value="${k}"${k === String(cur) ? ' selected' : ''}>${l}</option>`).join('');
+function aimInner(v) {
+  const list = parseAimStr(v).map(normAimCode).filter(Boolean);
+  const rows = list.map((c, i) => `<div class="aimrow"><select data-ai="area" aria-label="何を対象にするか">${aimOpts(AIM_AREA, c[0])}</select><select data-ai="side" aria-label="誰の">${aimOpts(AIM_SIDE, c[1])}</select>`
+    + (c[0] === 's' ? `<select data-ai="count" aria-label="個数">${aimOpts(c[1] === 'b' ? AIM_COUNT : Object.fromEntries(Object.entries(AIM_COUNT).filter(([k]) => k !== 'w')), c[2] || '')}</select>` : '<select data-ai="count" hidden><option value=""></option></select>')
+    + `<button type="button" class="lnk" data-ai="del" data-i="${i}" aria-label="この対象を消す">×</button></div>`).join('');
+  const signs = aimSigns(list.join(' '));
+  return `${rows}<button type="button" class="lnk" data-ai="add">＋ 対象を足す</button><div class="aimsign">${signs.length ? '四角の印：' + signs.join('　') : '四角の印：なし'}</div>`;
+}
+const aimEditorHtml = (v, attrs) => `<div class="aimed" ${attrs}>${aimInner(v)}</div>`;
+const aimFromHost = (host) => [...host.querySelectorAll('.aimrow')].map((r) => {
+  const g = (k) => r.querySelector(`[data-ai="${k}"]`).value;
+  return normAimCode(g('area') + g('side') + (g('area') === 's' ? g('count') : ''));
+}).filter(Boolean).join(' ');
+function aimChanged(host, v) {
+  host.innerHTML = aimInner(v);
+  if (host.dataset.for) { const h = $(host.dataset.for); h.value = v; h.dispatchEvent(new Event('change', { bubbles: true })); }
+  else if (host.dataset.id) applyCell(host.dataset.id, 'aim', v, null);
+}
+document.addEventListener('change', (ev) => { const host = ev.target.closest?.('.aimed'); if (host && ev.target.dataset.ai) aimChanged(host, aimFromHost(host)); });
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest?.('button[data-ai]'); if (!b) return;
+  const host = b.closest('.aimed'); if (!host) return;
+  const list = parseAimStr(aimFromHost(host));
+  if (b.dataset.ai === 'add') list.push('sm1'); else list.splice(Number(b.dataset.i), 1);
+  aimChanged(host, list.join(' '));
+});
 let tiles = [], base = [], edits = {}, open = null, lastList = [];
 /* デッキに入る枚数はレアリティで決まる（ゲームの決まり。tiles.json から読んだ値と同じ） */
-const MAX_COPIES = { 1: 3, 2: 3, 3: 3, 4: 2, 5: 1 };
+const MAX_COPIES = { 1: 3, 2: 3, 3: 2, 4: 2, 5: 1 };
 /*
  * **新しいタイル**（2026-10-08 ユーザー指定「タイルの作成もできるようにしてほしい。作成して保存したら追加されるやつで、絵は入らないけどほかは選択していろいろ設定できるように」）。
  * adminTiles/{new-…} に isNew: true で、全部の項目を持って置く。ゲームに入れるのは、効果の作り込みと絵を付けてから
  */
-const blankTile = () => ({ id: 'new-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, targetKind: 'none', svg: '' });
+const blankTile = () => ({ id: 'new-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), isNew: true, name: '', short: '', text: '', stageText: '', star: 1, cost: 0, costLabel: '', category: 'attack', scope: 'common', solo: false, when: '', quiet: false, aim: '', targetKind: 'none', svg: '' });
 const newTileOf = (id, d) => ({ ...blankTile(), ...Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'updatedAt' && k !== 'note' && k !== 'done')), id, isNew: true, svg: '' });
 /* 新しいタイルは、作った順に一覧のいちばん上へ（2026-10-08 ユーザー指定「新しく作ったものは一番上に順番に表示されるようにしてほしい」）。順は createdAt、無ければ id に入れた作った時刻 */
 const bornAt = (t) => t.createdAt || parseInt(String(t.id).slice(4, 12), 36) || 0;
@@ -524,8 +582,9 @@ const val = (t, k) => { const e = edits[t.id]; return e && e[k] !== undefined ? 
 const changedKeys = (t) => { const e = edits[t.id]; return e ? FIELDS.filter((k) => e[k] !== undefined && e[k] !== t[k]) : []; };
 const rimVars = (s) => RIM[s].map((c, i) => `--r${i + 1}:${c}`).join(';');
 const stars = (n) => '★'.repeat(n);
-const marksOf = (m) => [m.solo && 'ソロ', m.when === 'mine' && '自分の番だけ', m.when === 'theirs' && '相手の番だけ', m.quiet && 'サイレント'].filter(Boolean);
-const marks = (t) => marksOf({ solo: val(t, 'solo'), when: val(t, 'when'), quiet: val(t, 'quiet') });
+/* 一覧・絞り込みに出す印の名前（丸は「使用:」、四角は「対象:」、ひし形は 静・唯） */
+const marksOf = (m) => [m.when === 'mine' && '使用:自', m.when === 'theirs' && '使用:敵', ...aimSigns(m.aim).map((x) => '対象:' + x), m.quiet && '静', m.solo && '唯'].filter(Boolean);
+const marks = (t) => marksOf({ solo: val(t, 'solo'), when: val(t, 'when'), quiet: val(t, 'quiet'), aim: val(t, 'aim') });
 
 function chips(host, items, set, key) {
   host.innerHTML = '';
@@ -609,13 +668,14 @@ let pending = {};
 let drafts = [];
 const findTile = (id) => tiles.find((x) => x.id === id) || drafts.find((x) => x.id === id);
 const TCOLS = [['star', 'レアリティ', 'star'], ['cost', 'コスト', 'num'], ['short', '札の短い説明', 'area'], ['text', '効果（全文・対戦）', 'area'], ['stageText', '効果（ステージ用の文）', 'area'],
-  ['solo', 'ソロ', 'check'], ['quiet', 'サイレント', 'check'], ['when', '出せる番', WHEN], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '対象', TARGET], ['note', 'メモ', 'area']];
+  ['when', '使用条件（丸）', WHEN], ['aim', '対象（何に効くか・四角）', 'aim'], ['quiet', '静', 'check'], ['solo', '唯', 'check'], ['category', '種類', CAT], ['scope', '使いどころ', SCOPE], ['targetKind', '選び方', TARGET], ['note', 'メモ', 'area']];
 const savedVal = (t, k) => k === 'note' ? (edits[t.id]?.note || '') : k === 'done' ? !!edits[t.id]?.done : k === 'targetKind' ? t.targetKind : val(t, k);
 const cur = (t, k) => pending[t.id] && k in pending[t.id] ? pending[t.id][k] : savedVal(t, k);
 const kindOf = (k) => k === 'name' ? 'text' : k === 'done' ? 'check' : TCOLS.find((c) => c[0] === k)[2];
 function cellInput(t, k, kind) {
   const v = cur(t, k), d = `data-id="${esc(t.id)}" data-k="${k}" aria-label="${esc((TCOLS.find((c) => c[0] === k) || [0, k === 'done' ? '見直し済み' : '名前'])[1])}"`;
   if (k === 'targetKind' && !t.isNew) return `<span class="ro">${esc(TARGET[v] || '―')}</span>`;
+  if (kind === 'aim') return aimEditorHtml(v, `data-id="${esc(t.id)}" data-k="aim"`);
   if (kind === 'text') return `<input type="text" ${d} value="${esc(v)}"${t.draft ? ' placeholder="新しいタイルの名前"' : ''}>`;
   if (kind === 'area') return `<textarea rows="1" ${d}>${esc(v)}</textarea>`;
   if (kind === 'star') return `<select ${d}>${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n == v ? ' selected' : ''}>${stars(n)}</option>`).join('')}</select>`;
@@ -658,18 +718,22 @@ function refreshRows() {
 const fit = (ta) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; };
 function onCell(ev) {
   const el = ev.target, id = el.dataset?.id, k = el.dataset?.k; if (!id || !k) return;
-  const t = findTile(id); if (!t) return;
   const kind = kindOf(k);
-  const v = kind === 'check' ? el.checked : kind === 'star' || kind === 'num' ? Number(el.value) : el.value;
+  applyCell(id, k, kind === 'check' ? el.checked : kind === 'star' || kind === 'num' ? Number(el.value) : el.value, el);
+}
+/* 一覧の 1 つの欄に値を入れる（打った欄と、対象の編集欄の両方から呼ぶ） */
+function applyCell(id, k, v, el) {
+  const t = findTile(id); if (!t) return;
   const p = (pending[id] ||= {});
   if (v === savedVal(t, k)) delete p[k]; else p[k] = v;
   if (!Object.keys(p).length) delete pending[id];
-  const tr = el.closest('tr'), td = el.closest('td');
+  const anchor = el || document.querySelector(`.aimed[data-id="${CSS.escape(id)}"]`);
+  const tr = anchor.closest('tr'), td = anchor.closest('td');
   td.className = td.className.replace(/ ?(diff|dirty)/g, '') + cellCls(t, k);
   tr.classList.toggle('dirtyrow', !!pending[id]);
   tr.querySelector('[data-save]').disabled = !pending[id];
   if (k === 'star') tr.querySelector('.tart').setAttribute('style', rimVars(Number(v)));
-  if (el.tagName === 'TEXTAREA') fit(el);
+  if (el && el.tagName === 'TEXTAREA') fit(el);
   syncBulk();
 }
 async function saveRow(id) {
@@ -812,7 +876,7 @@ document.addEventListener('pointerup', async () => {
 const readField = (k, raw) => (k === 'star' || k === 'cost') ? Number(raw) : raw;
 /* 入力欄から今の値を読む（チェックは true/false） */
 const inputVal = (k) => { const el = $('e_' + k); return el.type === 'checkbox' ? el.checked : readField(k, el.value); };
-const shownOrig = (k, kind, orig) => kind === 'star' ? stars(orig) : kind === 'check' ? (orig ? '付いている' : '付いていない') : k === 'when' ? WHEN[orig] : k === 'category' ? CAT[orig] : k === 'scope' ? SCOPE[orig] : (orig === '' ? '（なし）' : orig);
+const shownOrig = (k, kind, orig) => k === 'aim' ? aimText(orig) : kind === 'star' ? stars(orig) : kind === 'check' ? (orig ? '付いている' : '付いていない') : k === 'when' ? WHEN[orig] : k === 'category' ? CAT[orig] : k === 'scope' ? SCOPE[orig] : (orig === '' ? '（なし）' : orig);
 function openSheet(id, draft) {
   const t = draft || tiles.find((x) => x.id === id); if (!t) return;
   id = t.id; open = id; const e = edits[id] || {};
@@ -836,7 +900,7 @@ function openSheet(id, draft) {
   $('layer').innerHTML = `<div class="shade" id="shade"></div>
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="top"><div class="art" style="${rimVars(t.star)}">${artHtml(t)}</div>
-      <div><h2>${esc(t.name || (draft ? '新しいタイル' : '（名前なし）'))}</h2>${fresh ? '<p class="msg" style="margin:4px 0">新しいタイルです。保存すると一覧に加わります。ゲームに入れるときは、効果の作り込みと絵を付けます</p>' : ''}<div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>対象：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
+      <div><h2>${esc(t.name || (draft ? '新しいタイル' : '（名前なし）'))}</h2>${fresh ? '<p class="msg" style="margin:4px 0">新しいタイルです。保存すると一覧に加わります。ゲームに入れるときは、効果の作り込みと絵を付けます</p>' : ''}<div class="info"><span>種類：${CAT[t.category]}</span><span>使いどころ：${SCOPE[t.scope]}</span><span>選び方：${TARGET[t.targetKind] || '―'}</span><span>デッキに入る枚数：${t.maxCopies}（レアリティで決まる）</span>${marks(t).length ? `<span>印：${marks(t).join('・')}</span>` : ''}${t.costLabel ? `<span>コスト表示：${esc(t.costLabel)}</span>` : ''}</div></div></div>
     <h3 class="sec">成績（${fm.period ? `この ${fm.period} 日` : 'ぜんぶ'}・選んでいる戦い ${stGames.toLocaleString()} 試合）</h3>
     ${(() => { const r = statOf(t); const row = (l, v, n) => `<div class="srow"><span>${l}</span><b>${v}</b><span class="msg">${n}</span></div>`;
       return stGames ? `<div class="sgrid">
@@ -851,12 +915,13 @@ function openSheet(id, draft) {
     ${fld('name', '名前')}
     <div class="two">${fld('star', 'レアリティ', 'star')}${fld('cost', 'コスト', 'num')}</div>
     ${fld('short', '札の短い説明', 'area')}${fld('text', '効果（全文・対戦）', 'area')}${fld('stageText', '効果（ステージ用の文）', 'area')}
-    <h3 class="sec">特殊効果（印）</h3>
-    <div class="two">${fld('solo', 'ソロ', 'check')}${fld('quiet', 'サイレント', 'check')}</div>
-    <div class="two">${fld('when', '出せる番', WHEN)}<div></div></div>
+    <h3 class="sec">印（使用条件・対象条件・特殊効果）</h3>
+    <div class="two">${fld('when', '使用条件（丸の印）', WHEN)}<div></div></div>
+    <div class="fld"><label>対象（何に効くか）。四角の印は、ここのスタックから決まります</label><input type="hidden" id="e_aim" value="${esc(val(t, 'aim') || '')}">${aimEditorHtml(val(t, 'aim') || '', 'data-for="e_aim"')}<div class="was">${fresh ? '' : `いまのゲーム：${esc(aimText(t.aim))}`}</div></div>
+    <div class="two">${fld('quiet', '静（サイレント）', 'check')}${fld('solo', '唯（このターン、この札だけ）', 'check')}</div>
     <h3 class="sec">分類</h3>
     <div class="two">${fld('category', '種類', CAT)}${fld('scope', '使いどころ', SCOPE)}</div>
-    ${fresh ? `<div class="two">${fld('targetKind', '対象（何を選んで使うか）', TARGET)}<div></div></div>` : ''}
+    ${fresh ? `<div class="two">${fld('targetKind', '選び方（何を選んで使うか）', TARGET)}<div></div></div>` : ''}
     <h3 class="sec">メモ</h3>
     <div class="fld"><label for="e_note">メモ（効果の中身を変えたいとき・相談したいことなど）</label><textarea id="e_note" rows="3">${esc(e.note || '')}</textarea></div>
     <h3 class="sec">見比べる（同じ種類・同じレアリティのほかの札 ${peers.length} 枚）</h3>
@@ -878,7 +943,7 @@ function openSheet(id, draft) {
     try { await dupTile(t.id, (k) => k === 'note' ? $('e_note').value : k === 'targetKind' ? $('e_targetKind').value : inputVal(k)); closeSheet(); }
     catch (err) { $('tmsg').innerHTML = `<span class="err">複製できませんでした（${esc(err.code || err.message)}）</span>`; $('b_dup').disabled = false; }
   };
-  if ($('b_reset')) $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
+  if ($('b_reset')) $('b_reset').onclick = () => { FIELDS.forEach((k) => { const el = $('e_' + k); if (el.type === 'checkbox') el.checked = t[k]; else el.value = t[k]; }); document.querySelector('.aimed[data-for="e_aim"]').innerHTML = aimInner(t.aim || ''); mark(); $('tmsg').textContent = '元の値にしました。保存すると反映されます'; };
   $('b_save').onclick = async () => {
     const doc = {};
     if (fresh) {
@@ -913,7 +978,8 @@ function tileLines(t) {
   const e = edits[t.id] || {};
   const line = (label, k) => { const v = val(t, k); const was = !t.isNew && v !== t[k] && t[k] ? `（いまのゲーム：${t[k]}）` : ''; return v || was ? `  ${label}：${v || '（なし）'}${was}` : ''; };
   return [
-    `■ ${val(t, 'name') || '（名前なし）'}［id: ${t.id}］${t.isNew ? '（新しいタイル）' : ''} ${stars(val(t, 'star'))}・コスト ${val(t, 'cost')}・${CAT[val(t, 'category')]}・${SCOPE[val(t, 'scope')]}・対象：${TARGET[t.targetKind] || '―'}${marks(t).length ? '・印：' + marks(t).join('・') : ''}`,
+    `■ ${val(t, 'name') || '（名前なし）'}［id: ${t.id}］${t.isNew ? '（新しいタイル）' : ''} ${stars(val(t, 'star'))}・コスト ${val(t, 'cost')}・${CAT[val(t, 'category')]}・${SCOPE[val(t, 'scope')]}・選び方：${TARGET[t.targetKind] || '―'}${marks(t).length ? '・印：' + marks(t).join('・') : ''}`,
+    `  対象（何に効くか）：${aimText(val(t, 'aim'))}${val(t, 'aim') ? '［' + val(t, 'aim') + '］' : ''}`,
     line('短い説明', 'short'), line('効果', 'text'), line('ステージ用の文', 'stageText'),
     e.note ? `  メモ：${e.note}` : '',
   ].filter(Boolean).join('\n');
@@ -924,7 +990,7 @@ function orderText(kind, ask) {
     '【デックマッチ管理画面からの注文】',
     `注文：${ask}`,
     `対象：${ORDER_SETS[kind]} ${list.length} 枚（ほかのタイルの書き方は、アプリのタイルの決まり src/game/tiles.ts と見比べてください）`,
-    `返事の形：直したいタイルだけを、管理画面の「返事を取り込む」に貼れる形で返してください。${IMPORT_HEAD} と ${IMPORT_TAIL} のあいだに {"tiles":[{"id":"…","short":"…","text":"…"}]} の JSON。書ける項目は name・short・text・stageText・star・cost・category・scope・solo・when・quiet・note（新しいタイルは targetKind も）。変えない項目は書かない。直した理由は note ではなく返事の本文で説明してください`,
+    `返事の形：直したいタイルだけを、管理画面の「返事を取り込む」に貼れる形で返してください。${IMPORT_HEAD} と ${IMPORT_TAIL} のあいだに {"tiles":[{"id":"…","short":"…","text":"…"}]} の JSON。書ける項目は name・short・text・stageText・star・cost・category・scope・solo（唯）・when（使用条件。\"\"・mine・theirs）・quiet（静）・aim（対象。「sm1 em」のようにスペースで区切る。1 つぶん＝何を[s スタック・e エナジー・d デッキ・x ダンプ・p プール]＋誰の[m 自分・f 相手・b お互い]＋個数[スタックだけ。1 つ・n 複数・a 全て・w フィールド全体（b のときだけ）。書かなければ選ばない]。四角の印はスタックの対象から決まる）・note（新しいタイルは targetKind も）。変えない項目は書かない。直した理由は note ではなく返事の本文で説明してください`,
     '---',
     ...list.map(tileLines),
   ].join('\n');
@@ -966,6 +1032,7 @@ function parseImport(raw) {
       if (k === 'star') v = Math.min(5, Math.max(1, Number(v) || 1));
       else if (k === 'cost') v = Math.min(20, Math.max(0, Number(v) || 0));
       else if (k === 'solo' || k === 'quiet') v = !!v;
+      else if (k === 'aim') v = normAim(v);
       else if (k === 'when') v = WHEN[v] !== undefined ? v : '';
       else if (k === 'category' && !CAT[v]) continue;
       else if (k === 'scope' && !SCOPE[v]) continue;
@@ -989,8 +1056,8 @@ function openImport() {
     <div class="acts"><span style="flex:1"></span><button class="btn" id="i_close">閉じる</button><button class="btn main" id="i_apply" disabled>選んだものを反映</button></div>
   </div>`;
   let rows = [];
-  const label = { name: '名前', short: '短い説明', text: '効果', stageText: 'ステージ用の文', star: 'レアリティ', cost: 'コスト', category: '種類', scope: '使いどころ', solo: 'ソロ', when: '出せる番', quiet: 'サイレント', note: 'メモ', targetKind: '対象' };
-  const show = (k, v) => k === 'star' ? stars(v) : k === 'solo' || k === 'quiet' ? (v ? '付ける' : '付けない') : k === 'when' ? WHEN[v] : k === 'category' ? CAT[v] : k === 'scope' ? SCOPE[v] : k === 'targetKind' ? TARGET[v] : (v === '' ? '（なし）' : v);
+  const label = { name: '名前', short: '短い説明', text: '効果', stageText: 'ステージ用の文', star: 'レアリティ', cost: 'コスト', category: '種類', scope: '使いどころ', solo: '唯', when: '使用条件', quiet: '静', aim: '対象', note: 'メモ', targetKind: '選び方' };
+  const show = (k, v) => k === 'star' ? stars(v) : k === 'aim' ? aimText(v) : k === 'solo' || k === 'quiet' ? (v ? '付ける' : '付けない') : k === 'when' ? WHEN[v] : k === 'category' ? CAT[v] : k === 'scope' ? SCOPE[v] : k === 'targetKind' ? TARGET[v] : (v === '' ? '（なし）' : v);
   $('i_read').onclick = () => {
     try { rows = parseImport($('i_raw').value); }
     catch (e) { $('i_msg').innerHTML = `<span class="err">読み取れませんでした（${esc(e.message)}）</span>`; $('i_list').innerHTML = ''; $('i_apply').disabled = true; return; }
@@ -1039,7 +1106,7 @@ async function startTiles() {
   pick($('fStar'), [1, 2, 3, 4, 5].map((n) => [n, stars(n)]), f.star);
   pick($('fCat'), Object.entries(CAT), f.cat);
   pick($('fScope'), Object.entries(SCOPE), f.scope);
-  pick($('fMark'), ['ソロ', '自分の番だけ', '相手の番だけ', 'サイレント', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
+  pick($('fMark'), ['使用:自', '使用:敵', ...['自', '自単', '自複', '自全', '敵', '敵単', '敵複', '敵全', '両', '両単', '両複', '両全', '場'].map((x) => '対象:' + x), '静', '唯', 'なし'].map((m) => [m, m === 'なし' ? '印なし' : m]), f.mark);
   pick($('fState'), [['all', 'すべて'], ['changed', '変更あり'], ['new', '新しいタイル'], ['memo', 'メモあり'], ['todo', '未確認'], ['done', '確認済み']], null, 'state');
   $('q').addEventListener('input', (ev) => { f.q = ev.target.value; render(); });
   $('sort').addEventListener('change', (ev) => { f.sort = ev.target.value; render(); });
