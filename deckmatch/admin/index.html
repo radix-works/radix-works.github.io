@@ -256,7 +256,7 @@ body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none 
     </div>
     <div class="bar">
       <div class="row"><span class="lab">表示</span><span id="fView" class="row"></span><span id="bulkBox" class="row" hidden><button class="btn main small" id="bulkSave">まとめて保存</button><button class="btn small" id="bulkUndo">保存していない変更を取り消す</button></span></div>
-      <div class="row"><button class="btn main small" id="newTile">＋ 新しいタイル</button><button class="btn small" id="orderBtn">表記をそろえる注文</button><button class="btn small" id="importBtn">返事を取り込む</button></div>
+      <div class="row"><button class="btn main small" id="newTile">＋ 新しいタイル</button><button class="btn small" id="orderBtn">注文を出力</button><button class="btn small" id="importBtn">返事を取り込む</button></div>
       <div class="row filters"><input type="search" id="q" placeholder="名前・説明で探す">
         <label class="sel"><span class="lab">レアリティ</span><select id="fStar"></select></label>
         <label class="sel"><span class="lab">種類</span><select id="fCat"></select></label>
@@ -933,7 +933,7 @@ function openOrder() {
   open = 'order';
   $('layer').innerHTML = `<div class="shade" id="shade"></div>
   <div class="sheet" role="dialog" aria-modal="true">
-    <h2>表記をそろえる注文</h2>
+    <h2>注文を出力</h2>
     <p class="msg" style="margin:0">注文文を作ってコピーし、Claude との会話に貼ってください。Claude の返事は「返事を取り込む」に貼ると、見比べてから反映できます。</p>
     <div class="fld"><label for="o_set">どのタイルについて</label><select id="o_set">${Object.entries(ORDER_SETS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><div class="was" id="o_count"></div></div>
     <div class="fld"><label for="o_ask">注文の内容</label><textarea id="o_ask" rows="4">変更した文章とメモを見て、同じような表記や効果のタイルの書き方をそろえてください（表記ゆれの統一）。変更していないタイルでも、そろえたほうがよいものは直してください。</textarea></div>
