@@ -481,10 +481,22 @@ async function startCat(k) {
 function startCatalogs() { Object.keys(CATALOGS).forEach(startCat); }
 
 /* ---------- タブ ---------- */
-document.querySelectorAll('.tab').forEach((t) => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
-  ['mail', 'tiles', 'enemies', 'skins'].forEach((n) => { $('tab-' + n).hidden = t.dataset.tab !== n; });
-});
+/* 開いているタブは覚えておき、更新（再読み込み）しても同じタブに戻る（2026-10-10 ユーザー指定「更新をしてもそのタブからうごかないように」） */
+const TABS = ['mail', 'tiles', 'enemies', 'skins'];
+function selectTab(name) {
+  if (!TABS.includes(name)) name = 'mail';
+  document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
+  TABS.forEach((n) => { $('tab-' + n).hidden = n !== name; });
+  try { localStorage.setItem('dm-admin-tab', name); } catch {}
+  try { history.replaceState(null, '', '#' + name); } catch {}
+}
+document.querySelectorAll('.tab').forEach((t) => t.onclick = () => selectTab(t.dataset.tab));
+{
+  let saved = location.hash.slice(1);
+  if (!TABS.includes(saved)) { try { saved = localStorage.getItem('dm-admin-tab') || ''; } catch { saved = ''; } }
+  if (TABS.includes(saved)) selectTab(saved);
+}
+
 
 /* ---------- 確認の窓 ---------- */
 function ask(title, lines, okLabel) {
