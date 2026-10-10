@@ -383,6 +383,25 @@ const CATALOGS = {
     ask: '下の名前の変更とメモのとおりに、スキンを直してください。名前は src/ui/avatar の rodStyles.ts・tileSkins.ts・tileParts.ts の表の name で決まります（売り場の一言は skinCatalog.ts の表）。メモは要望として読み、できないことや迷うことは返事で聞いてください。',
   },
 };
+
+/* ---------- 名前・メモの写し（2026-10-10 ユーザー指定「鍵なしで Claude がすぐ読めるように」） ----------
+ * タイル・エネみぃ・スキンの「名前の直し・メモ・見直し済み」を、1 つの文書 adminShare/{長い ID} に写して置く（管理画面を開いている間、変わるたび）。
+ * 規則（firestore.rules）で、長い ID を知っていれば get だけ読める（一覧は不可）。中身は設計のメモだけ
+ */
+const SHARE_ID = '372c99b65d1ef60e4a83a159a95042f33f1963a611c27061';
+let shareLast = '', shareTimer = null;
+function scheduleShare() {
+  clearTimeout(shareTimer);
+  shareTimer = setTimeout(async () => {
+    try {
+      const body = { tiles: edits, enemies: catSt.enemies.edits, skins: catSt.skins.edits };
+      const json = JSON.stringify(body);
+      if (json === shareLast || json.length > 900000) return;
+      shareLast = json;
+      await FB.setDoc(FB.doc(FB.db, 'adminShare', SHARE_ID), { ...JSON.parse(json), updatedAt: Date.now() });
+    } catch (e) { shareLast = ''; console.warn('写しを置けませんでした', e); }
+  }, 1500);
+}
 const catBlobs = new Map();
 function catUrl(key, svg) { if (!catBlobs.has(key)) catBlobs.set(key, URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))); return catBlobs.get(key); }
 const ROLE = { normal: 'ふつう', match: 'マッチエネみぃ', boss: 'ボスエネみぃ' };
@@ -496,7 +515,7 @@ async function startCat(k) {
     try { for (const x of l) await FB.setDoc(FB.doc(FB.db, c.col, c.idOf(x)), { done: true, updatedAt: Date.now() }, { merge: true }); } catch (e) { alert(`保存できませんでした（${e.code || e.message}）`); }
   };
   catRender(k);
-  FB.onSnapshot(FB.collection(FB.db, c.col), (snap) => { const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); st.edits = next; catRender(k); },
+  FB.onSnapshot(FB.collection(FB.db, c.col), (snap) => { const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); st.edits = next; catRender(k); scheduleShare(); },
     (e) => { $(k + 'Stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
 }
 function startCatalogs() { Object.keys(CATALOGS).forEach(startCat); }
@@ -1401,7 +1420,7 @@ async function startTiles() {
   render();
   loadStats();
   FB.onSnapshot(FB.collection(FB.db, 'adminTiles'), (snap) => {
-    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; rebuildTiles();
+    const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); edits = next; rebuildTiles(); scheduleShare();
     // 一覧で編集のときに打っている途中なら、行を作り直さない（打っている文字と位置を守る）
     if (f.view === 'table' && document.activeElement?.closest('#tbl')) refreshRows(); else render();
   }, (e) => { $('stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
