@@ -201,6 +201,8 @@ body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="mail" aria-selected="true">メール</button>
     <button class="tab" role="tab" data-tab="tiles" aria-selected="false">タイル見直し</button>
+    <button class="tab" role="tab" data-tab="enemies" aria-selected="false">エネみぃ</button>
+    <button class="tab" role="tab" data-tab="skins" aria-selected="false">スキン</button>
   </div>
 
   <!-- メール -->
@@ -275,6 +277,29 @@ body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none 
     <div class="tablewrap" id="tableWrap" hidden><table id="tbl"><thead></thead><tbody></tbody></table></div>
     <div class="empty" id="empty" hidden>当てはまるタイルがありません</div>
   </section>
+  <!-- エネみぃの見直し（2026-10-10） -->
+  <section class="page" id="tab-enemies" hidden>
+    <div class="stats" id="enemiesStats">読み込み中…</div>
+    <div class="bar">
+      <div class="row"><button class="btn small" id="enemiesOrder">注文を出力</button><button class="btn small" id="enemiesDone">表示中の未反映を、反映済みにする</button></div>
+      <div class="row filters"><input type="search" id="enemiesQ" placeholder="名前・説明・メモで探す">
+        <span id="enemiesSels" class="row"></span></div>
+    </div>
+    <div class="grid" id="enemiesGrid"></div>
+    <div class="empty" id="enemiesEmpty" hidden>当てはまるものがありません</div>
+  </section>
+
+  <!-- スキンの見直し（2026-10-10） -->
+  <section class="page" id="tab-skins" hidden>
+    <div class="stats" id="skinsStats">読み込み中…</div>
+    <div class="bar">
+      <div class="row"><button class="btn small" id="skinsOrder">注文を出力</button><button class="btn small" id="skinsDone">表示中の未反映を、反映済みにする</button></div>
+      <div class="row filters"><input type="search" id="skinsQ" placeholder="名前・説明・メモで探す">
+        <span id="skinsSels" class="row"></span></div>
+    </div>
+    <div class="grid" id="skinsGrid"></div>
+    <div class="empty" id="skinsEmpty" hidden>当てはまるものがありません</div>
+  </section>
 </div>
 <div id="layer"></div>
 
@@ -302,14 +327,163 @@ FB.onUser((u) => {
     return;
   }
   $('gate').hidden = true; $('app').hidden = false;
-  if (!started) { started = true; startMail(); startTiles(); }
+  if (!started) { started = true; startMail(); startTiles(); startCatalogs(); }
 });
+
+
+/* ---------- エネみぃ・スキンの見直し（2026-10-10 ユーザー指定「エネみぃの名前とデザインを全部出して。種類とかは統一して並べて」「名前を変更できるように」
+ * 「メモを書いて、その要望通りに反映してもらう機能も」「スキンも同じものを」） ----------
+ * 全部を、ゲームの図鑑・売り場と同じ並び（種類 → 役まわり／希少度 → …）で出す。名前の直し・メモ・反映済みを、1 つ 1 文書で
+ * adminEnemies/{エネみぃの名前}・adminSkins/{種類:id} に置く（{ name, note, done }）。ゲームに入れるのは、注文を出力して Claude に貼る
+ */
+const CATALOGS = {
+  enemies: {
+    label: 'エネみぃ', col: 'adminEnemies', json: 'enemies.json', idOf: (x) => x.name,
+    facets: [
+      ['kindLabel', '体の種類'], ['roleLabel', '役まわり'], ['hueName', '色'], ['faceLabel', '目つき'], ['shapeLabel', '体の形'],
+    ],
+    tags: (x) => [x.kindLabel, x.roleLabel, x.hueName + '色', x.faceLabel],
+    line: (x) => `${x.role === 'match' ? `ちょうど ${x.killAt}（はじめ ${x.start ?? 1}）` : `HP ${x.hp}`}・攻撃 ${x.power ?? '―'}・強さ ${x.level}${x.abilities.length ? '・能力：' + x.abilities.join('・') : ''}`,
+    detail: (x) => [['体の種類', x.kindLabel], ['役まわり', x.roleLabel], ['色', x.hueName], ['目つき', x.faceLabel], ['体の形', x.shapeLabel], ['強さ', x.level],
+      [x.role === 'match' ? 'ちょうど倒れる本数' : 'HP', x.role === 'match' ? x.killAt : x.hp], ['攻撃', x.power ?? '―'], ['能力', x.abilities.join('・') || 'なし']],
+    text: (x) => x.note,
+    art: (x) => `<img alt="" loading="lazy" src="${catUrl('svg:' + x.name, x.svg)}">`,
+    sortKey: (x) => 0,
+    rim: (x) => rimVars(x.role === 'boss' ? 4 : x.role === 'match' ? 3 : 2),
+    ask: '下の名前の変更とメモのとおりに、エネみぃを直してください。名前を変えるときは、src/game/enemies.ts の表のキーと name、配置表（stage-table.ts など）、図鑑・ステージの文章、旧名からの引き継ぎ（src/game/enemyRenames.ts）をそろえて直してください。メモは要望として読み、できないことや迷うことは返事で聞いてください。',
+  },
+  skins: {
+    label: 'スキン', col: 'adminSkins', json: 'skins.json', idOf: (x) => x.kind + ':' + x.id,
+    facets: [['kindLabel', '種類'], ['rarityLabel', '希少度'], ['priceLabel2', '入手'], ['shape', 'マッチの形']],
+    tags: (x) => [x.kindLabel, x.rarityLabel, x.priceLabel, x.shape].filter(Boolean),
+    line: (x) => x.note,
+    detail: (x) => [['種類', x.kindLabel], ['希少度', x.rarityLabel], ['入手・値段', x.priceLabel], ['id', x.id], ...(x.shape ? [['マッチの形', x.shape]] : [])],
+    text: (x) => x.note,
+    art: (x) => `<img alt="" loading="lazy" src="skin/${x.idx}.webp">`,
+    rim: (x) => rimVars({ basic: 1, fine: 2, rare: 4, legend: 5 }[x.rarity] || 1),
+    ask: '下の名前の変更とメモのとおりに、スキンを直してください。名前は src/ui/avatar の rodStyles.ts・tileSkins.ts・tileParts.ts の表の name で決まります（売り場の一言は skinCatalog.ts の表）。メモは要望として読み、できないことや迷うことは返事で聞いてください。',
+  },
+};
+const catBlobs = new Map();
+function catUrl(key, svg) { if (!catBlobs.has(key)) catBlobs.set(key, URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))); return catBlobs.get(key); }
+const ROLE = { normal: 'ふつう', match: 'マッチエネみぃ', boss: 'ボスエネみぃ' };
+const CAT_STATE = { all: 'すべて', rename: '名前を変える', memo: 'メモあり', todo: '未反映（変更かメモあり）', done: '反映済み' };
+const catSt = {};
+for (const k of Object.keys(CATALOGS)) catSt[k] = { items: [], edits: {}, q: '', sel: {}, state: 'all', shown: [] };
+const catName = (k, x) => { const e = catSt[k].edits[CATALOGS[k].idOf(x)]; return e && e.name ? e.name : x.name; };
+const catRenamed = (k, x) => { const e = catSt[k].edits[CATALOGS[k].idOf(x)]; return !!(e && e.name && e.name !== x.name); };
+const catNote = (k, x) => catSt[k].edits[CATALOGS[k].idOf(x)]?.note || '';
+const catDone = (k, x) => !!catSt[k].edits[CATALOGS[k].idOf(x)]?.done;
+const catPending = (k, x) => (catRenamed(k, x) || !!catNote(k, x)) && !catDone(k, x);
+function catList(k) {
+  const c = CATALOGS[k], st = catSt[k], q = st.q.trim().toLowerCase();
+  return st.items.filter((x) => {
+    for (const [f, v] of Object.entries(st.sel)) if (v && x[f] !== v) return false;
+    if (q && !`${x.name} ${catName(k, x)} ${c.text(x)} ${catNote(k, x)}`.toLowerCase().includes(q)) return false;
+    if (st.state === 'rename' && !catRenamed(k, x)) return false;
+    if (st.state === 'memo' && !catNote(k, x)) return false;
+    if (st.state === 'todo' && !catPending(k, x)) return false;
+    if (st.state === 'done' && !catDone(k, x)) return false;
+    return true;
+  });
+}
+function catRender(k) {
+  const c = CATALOGS[k], st = catSt[k], list = catList(k);
+  st.shown = list;
+  const changed = st.items.filter((x) => catRenamed(k, x)).length, memos = st.items.filter((x) => catNote(k, x)).length, todo = st.items.filter((x) => catPending(k, x)).length;
+  $(k + 'Stats').innerHTML = `全 <b>${st.items.length}</b>（表示 <b>${list.length}</b>）・名前を変える <b>${changed}</b>・メモあり <b>${memos}</b>・未反映 <b>${todo}</b>`;
+  $(k + 'Empty').hidden = list.length > 0;
+  $(k + 'Grid').innerHTML = list.map((x) => {
+    const id = CATALOGS[k].idOf(x), ren = catRenamed(k, x), note = catNote(k, x), done = catDone(k, x);
+    return `<button class="card" data-cat="${k}" data-id="${esc(id)}">${ren || note ? `<span class="flag ${done ? 'ok' : 'ch'}">${done ? '反映済み' : ren ? '名前変更' : 'メモ'}</span>` : ''}
+      <div class="art" style="${c.rim(x)}">${c.art(x)}</div>
+      <div class="nm">${esc(catName(k, x))}${ren ? `<div class="sh"><s>${esc(x.name)}</s></div>` : ''}</div>
+      <div class="sh">${esc(c.line(x))}</div>
+      <div class="tags">${c.tags(x).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}${note ? '<span class="tag">メモ</span>' : ''}</div></button>`;
+  }).join('');
+}
+function catSheet(k, id) {
+  const c = CATALOGS[k], st = catSt[k], x = st.items.find((y) => c.idOf(y) === id); if (!x) return;
+  open = 'cat:' + k + ':' + id;
+  const e = st.edits[id] || {};
+  $('layer').innerHTML = `<div class="shade" id="shade"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="top"><div class="art" style="${c.rim(x)}">${c.art(x)}</div>
+      <div><h2>${esc(catName(k, x))}</h2><div class="info">${c.detail(x).map(([a, b]) => `<span>${esc(a)}：${esc(b)}</span>`).join('')}</div></div></div>
+    ${c.text(x) ? `<p class="msg" style="margin:0">${esc(c.text(x))}</p>` : ''}
+    <div class="fld"><label for="c_name">名前（変えたいときは、ここを書き換えます）</label><input type="text" id="c_name" value="${esc(e.name || x.name)}"><div class="was">いまのゲーム：${esc(x.name)}</div></div>
+    <div class="fld"><label for="c_note">メモ（デザインや名前の要望・相談したいことなど。注文を出力すると、Claude がこのとおりに直します）</label><textarea id="c_note" rows="5">${esc(e.note || '')}</textarea></div>
+    <div class="acts"><label class="chk"><input type="checkbox" id="c_done"${e.done ? ' checked' : ''}> 反映済み</label><span style="flex:1"></span><span class="msg" id="c_msg"></span>
+      <button class="btn" id="c_close">閉じる</button><button class="btn main" id="c_save">保存</button></div>
+  </div>`;
+  $('shade').onclick = closeSheet; $('c_close').onclick = closeSheet;
+  $('c_save').onclick = async () => {
+    const name = $('c_name').value.trim(), note = $('c_note').value.trim(), doc = {};
+    if (name && name !== x.name) doc.name = name;
+    if (note) doc.note = note;
+    if ($('c_done').checked) doc.done = true;
+    $('c_save').disabled = true; $('c_msg').textContent = '保存中…';
+    try {
+      const ref = FB.doc(FB.db, c.col, id);
+      if (Object.keys(doc).length) await FB.setDoc(ref, { ...doc, updatedAt: Date.now() }); else await FB.deleteDoc(ref);
+      closeSheet();
+    } catch (err) { $('c_msg').innerHTML = `<span class="err">保存できませんでした（${esc(err.code || err.message)}）</span>`; $('c_save').disabled = false; }
+  };
+}
+function catOrder(k) {
+  const c = CATALOGS[k], st = catSt[k];
+  open = 'catorder';
+  const body = (all) => st.items.filter((x) => (catRenamed(k, x) || catNote(k, x)) && (all || !catDone(k, x))).map((x) => [
+    `■ ${x.name}［${c.idOf(x)}］ ${c.tags(x).join('・')}`,
+    catRenamed(k, x) ? `  名前を「${catName(k, x)}」に変える` : '',
+    catNote(k, x) ? `  メモ：${catNote(k, x)}` : '',
+  ].filter(Boolean).join('\n'));
+  $('layer').innerHTML = `<div class="shade" id="shade"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h2>${c.label}の注文を出力</h2>
+    <p class="msg" style="margin:0">名前の変更とメモがあるものを、注文文にします。コピーして Claude との会話に貼ってください。反映してもらったら、「反映済みにする」で印を付けます。</p>
+    <div class="fld"><label class="chk"><input type="checkbox" id="o_all"> 反映済みのものも入れる</label><div class="was" id="o_count"></div></div>
+    <div class="fld"><label for="o_text">注文文（このままコピーされます）</label><textarea id="o_text" rows="14" readonly></textarea></div>
+    <div class="acts"><span class="msg" id="o_msg"></span><span style="flex:1"></span><button class="btn" id="o_close">閉じる</button><button class="btn main" id="o_copy">注文文をコピー</button></div>
+  </div>`;
+  const sync = () => { const l = body($('o_all').checked); $('o_count').textContent = `${l.length} 件`; $('o_text').value = [`【デックマッチ管理画面からの注文（${c.label}）】`, `注文：${c.ask}`, `対象：${l.length} 件`, '---', ...l].join('\n'); };
+  $('o_all').onchange = sync; sync();
+  $('shade').onclick = closeSheet; $('o_close').onclick = closeSheet;
+  $('o_copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('o_text').value); $('o_msg').innerHTML = '<span class="okmsg">コピーしました。Claude との会話に貼ってください</span>'; }
+    catch { $('o_text').select(); $('o_msg').textContent = 'コピーできなかったので、注文文を選んであります。長押し（右クリック）でコピーしてください'; }
+  };
+}
+async function startCat(k) {
+  const c = CATALOGS[k], st = catSt[k];
+  try {
+    st.items = await (await fetch(c.json, { cache: 'no-cache' })).json();
+    st.items.forEach((x) => { x.roleLabel = ROLE[x.role]; x.priceLabel2 = x.priceKind === 'coin' ? 'コイン' : x.priceKind === 'gem' ? 'ジェム' : x.priceLabel; });
+  } catch (e) { $(k + 'Stats').innerHTML = '<span class="err">一覧を読み込めませんでした。開き直してください</span>'; return; }
+  // 絞り込み：図鑑・売り場と同じ並びの順に、出てくる値を並べる
+  $(k + 'Sels').innerHTML = c.facets.map(([f, lab]) => {
+    const vals = [...new Set(st.items.map((x) => x[f]).filter(Boolean))];
+    return `<label class="sel"><span class="lab">${lab}</span><select data-f="${f}"><option value="">すべて</option>${vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select></label>`;
+  }).join('') + `<label class="sel"><span class="lab">状態</span><select data-f="__state">${Object.entries(CAT_STATE).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>`;
+  $(k + 'Sels').onchange = (ev) => { const f = ev.target.dataset.f; if (f === '__state') st.state = ev.target.value; else st.sel[f] = ev.target.value; ev.target.classList.toggle('on', ev.target.value !== '' && ev.target.value !== 'all'); catRender(k); };
+  $(k + 'Q').addEventListener('input', (ev) => { st.q = ev.target.value; catRender(k); });
+  $(k + 'Grid').onclick = (ev) => { const b = ev.target.closest('[data-cat]'); if (b) catSheet(k, b.dataset.id); };
+  $(k + 'Order').onclick = () => catOrder(k);
+  $(k + 'Done').onclick = async () => {
+    const l = st.shown.filter((x) => catPending(k, x)); if (!l.length) return;
+    if (!(await ask('反映済みにしますか', [`表示中の未反映 ${l.length} 件を、反映済みにします。`, 'Claude に反映してもらったあとに押してください。'], '反映済みにする'))) return;
+    try { for (const x of l) await FB.setDoc(FB.doc(FB.db, c.col, c.idOf(x)), { done: true, updatedAt: Date.now() }, { merge: true }); } catch (e) { alert(`保存できませんでした（${e.code || e.message}）`); }
+  };
+  catRender(k);
+  FB.onSnapshot(FB.collection(FB.db, c.col), (snap) => { const next = {}; snap.docs.forEach((d) => { next[d.id] = d.data(); }); st.edits = next; catRender(k); },
+    (e) => { $(k + 'Stats').innerHTML += ` <span class="err">書き換えを読み込めませんでした（${esc(e.code || e.message)}）</span>`; });
+}
+function startCatalogs() { Object.keys(CATALOGS).forEach(startCat); }
 
 /* ---------- タブ ---------- */
 document.querySelectorAll('.tab').forEach((t) => t.onclick = () => {
   document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
-  $('tab-mail').hidden = t.dataset.tab !== 'mail';
-  $('tab-tiles').hidden = t.dataset.tab !== 'tiles';
+  ['mail', 'tiles', 'enemies', 'skins'].forEach((n) => { $('tab-' + n).hidden = t.dataset.tab !== n; });
 });
 
 /* ---------- 確認の窓 ---------- */
