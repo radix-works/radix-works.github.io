@@ -37,6 +37,11 @@ h2 { font-family: var(--display); font-weight: 400; font-size: 18px; margin: 0 }
 .btn.main { background: var(--accent); color: #fff }
 .btn.small { padding: 4px 10px; font-size: 12px }
 .btn:disabled { opacity: .5; cursor: default }
+.vtabs { display: flex; gap: 6px; margin: 8px 0 }
+.vtabs .btn { padding: 4px 12px; font-size: 13px }
+.vtabs .btn[aria-pressed="true"] { background: var(--accent); color: #fff }
+.art img.tapme { cursor: pointer }
+.hint { font-size: 12px; color: var(--sub); margin-top: 4px }
 .btn:focus-visible, .chip:focus-visible, .tab:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 input[type=search], input[type=text], input[type=number], input[type=datetime-local], textarea, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0 }
 .note { background: var(--warn-soft); border-radius: 6px; padding: 8px 12px; font-size: 13px }
@@ -462,7 +467,7 @@ function catSheet(k, id) {
   $('layer').innerHTML = `<div class="shade" id="shade"></div>
   <div class="sheet" role="dialog" aria-modal="true">
     <div class="top"><div class="art" style="${c.rim(x)}">${c.art(x)}</div>
-      <div><h2>${esc(catName(k, x))}</h2><div class="info">${c.detail(x).map(([a, b]) => `<span>${esc(a)}：${esc(b)}</span>`).join('')}</div></div></div>
+      <div><h2 id="c_h2">${esc(catName(k, x))}</h2>${k === 'enemies' && (x.boss || x.match) ? `<div class="vtabs" id="c_vtabs"><button class="btn" data-v="normal" aria-pressed="true">ふつう</button>${x.boss ? '<button class="btn" data-v="boss" aria-pressed="false">ボス</button>' : ''}${x.match ? '<button class="btn" data-v="match" aria-pressed="false">マッチ</button>' : ''}</div>` : ''}<div class="info" id="c_info">${c.detail(x).map(([a, b]) => `<span>${esc(a)}：${esc(b)}</span>`).join('')}</div>${k === 'enemies' && x.svgHurt ? '<div class="hint">絵をタップすると、やられ顔に切り替わります</div>' : ''}</div></div>
     ${c.text(x) ? `<p class="msg" style="margin:0">${esc(c.text(x))}</p>` : ''}
     <div class="fld"><label for="c_name">名前（変えたいときは、ここを書き換えます）</label><input type="text" id="c_name" value="${esc(e.name || x.name)}"><div class="was">いまのゲーム：${esc(x.name)}</div></div>
     <div class="fld"><label for="c_note">メモ（デザインや名前の要望・相談したいことなど。注文を出力すると、Claude がこのとおりに直します）</label><textarea id="c_note" rows="5">${esc(e.note || '')}</textarea></div>
@@ -470,6 +475,27 @@ function catSheet(k, id) {
       <button class="btn" id="c_close">閉じる</button><button class="btn main" id="c_save">保存</button></div>
   </div>`;
   $('shade').onclick = closeSheet; $('c_close').onclick = closeSheet;
+  if (k === 'enemies') {
+    // 絵をタップで、やられ顔に切り替え。ボス・マッチのタブで、能力値と大きさを切り替え（2026-10-11）
+    const img = document.querySelector('#layer .top .art img');
+    let hurt = false, variant = 'normal';
+    const paint = () => { if (img) { img.src = catUrl((hurt ? 'hurt:' : 'svg:') + x.name, hurt ? x.svgHurt : x.svg); img.style.transform = variant === 'boss' ? 'scale(1.15)' : ''; } };
+    if (img && x.svgHurt) { img.classList.add('tapme'); img.title = 'タップでやられ顔'; img.onclick = () => { hurt = !hurt; paint(); }; }
+    const rows = (v) => {
+      if (v === 'boss') return [['役まわり', 'ボス'], ['強さ', x.boss.level], ['HP', x.boss.hp], ['攻撃', x.boss.power], ['能力', x.boss.abilities.join('・') || 'なし'], ['大きさ', '×1.15']];
+      if (v === 'match') return [['役まわり', 'マッチ'], ['強さ', x.match.level], ['ちょうど倒れる本数', x.match.killAt], ['はじめの本数', x.match.start ?? 1], ['能力', x.match.abilities.join('・') || 'なし']];
+      return c.detail(x);
+    };
+    document.querySelectorAll('#c_vtabs button').forEach((btn) => {
+      btn.onclick = () => {
+        variant = btn.dataset.v;
+        document.querySelectorAll('#c_vtabs button').forEach((b2) => b2.setAttribute('aria-pressed', String(b2 === btn)));
+        $('c_info').innerHTML = rows(variant).map(([a2, b2]) => `<span>${esc(a2)}：${esc(b2)}</span>`).join('');
+        $('c_h2').textContent = variant === 'boss' ? x.boss.name : variant === 'match' ? x.match.name : catName(k, x);
+        paint();
+      };
+    });
+  }
   $('c_save').onclick = async () => {
     const name = $('c_name').value.trim(), note = $('c_note').value.trim(), doc = {};
     if (name && name !== x.name) doc.name = name;
