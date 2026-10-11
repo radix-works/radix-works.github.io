@@ -222,6 +222,7 @@ body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none 
     <button class="tab" role="tab" data-tab="tiles" aria-selected="false">タイル見直し</button>
     <button class="tab" role="tab" data-tab="enemies" aria-selected="false">エネみぃ</button>
     <button class="tab" role="tab" data-tab="skins" aria-selected="false">スキン</button>
+    <button class="tab" role="tab" data-tab="reports" aria-selected="false">通報</button>
   </div>
 
   <!-- メール -->
@@ -309,6 +310,17 @@ body.dragmode, body.dragmode * { cursor: grabbing !important; user-select: none 
   </section>
 
   <!-- スキンの見直し（2026-10-10） -->
+  <!-- 通報（2026-10-11 ユーザー指定「通報を受けたユーザーがリスト化される仕組み」「警告」「名前を強制的に変えられる」「アカウントを停止できる」） -->
+  <section class="page" id="tab-reports" hidden>
+    <div class="box">
+      <div class="row"><h2 style="flex:1">通報された人</h2><button class="btn small" id="repReload">読み直す</button></div>
+      <div class="row" id="repFilter"><button class="chip" data-f="open" aria-pressed="true">未対応あり</button><button class="chip" data-f="all" aria-pressed="false">すべて</button><button class="chip" data-f="banned" aria-pressed="false">停止中</button><span class="msg" id="repCount"></span></div>
+      <div class="row"><input type="text" id="repCode" placeholder="フレンドコードで探す（8 文字）" maxlength="8"><button class="btn small" id="repLook">探す</button><span class="msg" id="repLookMsg"></span></div>
+      <div class="list" id="repList"><p class="msg">読み込み中…</p></div>
+      <p class="msg">警告は、相手のアプリに「運営からのお知らせ」として出ます。名前を変えると、相手の名前は「プレイヤー」になり、新しい名前を決めるまで遊べません（元の名前には戻せません）。停止すると、相手は遊べなくなり、問い合わせ先だけが出ます。</p>
+    </div>
+  </section>
+
   <section class="page" id="tab-skins" hidden>
     <div class="stats" id="skinsStats">読み込み中…</div>
     <div class="bar">
@@ -346,7 +358,7 @@ FB.onUser((u) => {
     return;
   }
   $('gate').hidden = true; $('app').hidden = false;
-  if (!started) { started = true; startMail(); startTiles(); startCatalogs(); }
+  if (!started) { started = true; startMail(); startTiles(); startCatalogs(); startReports(); }
 });
 
 
@@ -522,7 +534,7 @@ function startCatalogs() { Object.keys(CATALOGS).forEach(startCat); }
 
 /* ---------- タブ ---------- */
 /* 開いているタブは覚えておき、更新（再読み込み）しても同じタブに戻る（2026-10-10 ユーザー指定「更新をしてもそのタブからうごかないように」） */
-const TABS = ['mail', 'tiles', 'enemies', 'skins'];
+const TABS = ['mail', 'tiles', 'enemies', 'skins', 'reports'];
 function selectTab(name) {
   if (!TABS.includes(name)) name = 'mail';
   document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
@@ -551,6 +563,183 @@ function ask(title, lines, okLabel) {
     document.body.append(shade, box);
     box.querySelector('[data-a=yes]').focus();
   });
+}
+
+/* ---------- 通報（2026-10-11 ユーザー指定「通報を受けたユーザーがリスト化される仕組み（管理画面で閲覧）」「警告を出せること、名前を強制的に変えられること、アカウントを停止できること。すべて管理画面から」） ----------
+ * アプリが置く reports/{id}（{ from, target, name, code, icon, reason, at }。src/net/friends.ts の reportUser）を、通報された人ごとにまとめて出す。
+ * 対応は moderation/{uid} に書く（アプリは src/net/moderation.ts で見張る。決まりは firestore.rules の match /moderation）。
+ *   警告 … warnCount・warnText・warnAt
+ *   名前 … renameRequired・renamedFrom と、users/{uid}.name を「プレイヤー」に（1 度に書く）
+ *   停止 … banned・banReason・bannedAt（解くときは banned: false）
+ * 対応したら、その人の未対応の通報に handled の印を付ける
+ */
+const REASONS = { name: '不適切な名前', icon: '不適切なアイコン', harass: '嫌がらせ・迷惑行為', cheat: '不正行為', other: 'その他' };
+const WARN_TEXT = {
+  name: 'あなたのプレイヤー名について、ほかのプレイヤーから通報がありました。不適切な名前は利用規約で禁止しています。名前を変えてください。',
+  icon: 'あなたのアイコンについて、ほかのプレイヤーから通報がありました。利用規約に沿ったものに変えてください。',
+  harass: 'ほかのプレイヤーへの迷惑行為について通報がありました。利用規約で禁止している行為です。',
+  cheat: '不正行為について通報がありました。利用規約で禁止している行為です。',
+  other: 'あなたについて、ほかのプレイヤーから通報がありました。利用規約を守って遊んでください。',
+};
+const RENAME_TO = 'プレイヤー';
+let repDocs = [], modByUid = new Map(), nameByUid = new Map(), repF = 'open', repOpen = new Set(), repExtra = new Map();
+const tsMs = (v) => (v && typeof v.toMillis === 'function' ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
+const fmtMs = (ms) => (ms ? new Date(ms).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+
+/** 文を書いてから進む窓（警告の文・停止の理由） */
+function askText(title, lines, okLabel, initial) {
+  return new Promise((resolve) => {
+    const shade = document.createElement('div'); shade.className = 'confirm-shade';
+    const box = document.createElement('div'); box.className = 'confirm'; box.setAttribute('role', 'dialog');
+    box.innerHTML = `<h2>${esc(title)}</h2>${lines.map((l) => `<p class="msg" style="margin:0">${esc(l)}</p>`).join('')}<textarea maxlength="300" style="min-height:110px">${esc(initial)}</textarea><div class="row" style="justify-content:flex-end"><button class="btn" data-a="no">やめる</button><button class="btn main" data-a="yes">${esc(okLabel)}</button></div>`;
+    const ta = box.querySelector('textarea');
+    const done = (v) => { shade.remove(); box.remove(); resolve(v); };
+    shade.onclick = () => done(null);
+    box.querySelector('[data-a=no]').onclick = () => done(null);
+    box.querySelector('[data-a=yes]').onclick = () => { const v = ta.value.trim(); if (v) done(v); else ta.focus(); };
+    document.body.append(shade, box);
+    ta.focus();
+  });
+}
+
+/** 通報された人ごとにまとめる（新しい通報のある順） */
+function repPeople() {
+  const by = new Map();
+  for (const r of repDocs) {
+    const d = r.d;
+    let p = by.get(d.target);
+    if (!p) by.set(d.target, (p = { uid: d.target, reports: [], open: 0, last: 0, name: d.name, code: d.code, reasons: {} }));
+    p.reports.push(r);
+    if (!d.handled) p.open++;
+    const at = tsMs(d.at);
+    if (at >= p.last) { p.last = at; p.name = d.name; p.code = d.code; }
+    p.reasons[d.reason] = (p.reasons[d.reason] || 0) + 1;
+  }
+  // 通報は無いが、探して開いた人・止めている人も並べる
+  for (const [uid, x] of repExtra) if (!by.has(uid)) by.set(uid, { uid, reports: [], open: 0, last: 0, name: x.name, code: x.code, reasons: {} });
+  for (const [uid, m] of modByUid) if (m.banned && !by.has(uid)) by.set(uid, { uid, reports: [], open: 0, last: 0, name: m.renamedFrom || '', code: '', reasons: {} });
+  return [...by.values()].sort((a, b) => (b.open > 0) - (a.open > 0) || b.last - a.last);
+}
+
+function repStatus(uid) {
+  const m = modByUid.get(uid) || {};
+  return [
+    m.warnCount ? `<span class="pill">警告 ${m.warnCount} 回${tsMs(m.warnSeenAt) >= tsMs(m.warnAt) && tsMs(m.warnAt) ? '（読んだ）' : '（未読）'}</span>` : '',
+    m.renameRequired ? `<span class="pill">名前の変更待ち（元：${esc(m.renamedFrom)}）</span>` : m.renamedFrom ? `<span class="pill">名前を変えさせた（元：${esc(m.renamedFrom)}）</span>` : '',
+    m.banned ? `<span class="pill" style="background:#c0392b;color:#fff">停止中${m.banReason ? '：' + esc(m.banReason) : ''}</span>` : '',
+  ].join('');
+}
+
+function renderReports() {
+  const all = repPeople();
+  const rows = all.filter((p) => repF === 'all' || (repF === 'open' ? p.open > 0 || repExtra.has(p.uid) : (modByUid.get(p.uid) || {}).banned));
+  $('repCount').textContent = `${rows.length} 人`;
+  $('repList').innerHTML = rows.length ? rows.map((p) => {
+    const m = modByUid.get(p.uid) || {};
+    const now = nameByUid.get(p.uid);
+    const reasons = Object.entries(p.reasons).map(([k, n]) => `${REASONS[k] || k} ${n}`).join('・');
+    const open = repOpen.has(p.uid);
+    return `<div class="item" data-uid="${esc(p.uid)}">
+      <div class="top"><b>${esc(now ?? p.name ?? '（名前なし）')}</b><span class="msg">${p.code ? 'コード ' + esc(p.code) : ''}</span></div>
+      <div class="meta">通報 ${p.reports.length} 件（未対応 ${p.open}）${reasons ? '・' + esc(reasons) : ''}${p.last ? '・最後 ' + fmtMs(p.last) : ''}${now != null && p.name && now !== p.name ? '・通報時の名前「' + esc(p.name) + '」' : ''}</div>
+      <div class="row">${repStatus(p.uid)}</div>
+      <div class="row">
+        ${p.reports.length ? `<button class="btn small" data-a="list">${open ? '通報を閉じる' : '通報を見る'}</button>` : ''}
+        <button class="btn small" data-a="warn">警告する</button>
+        <button class="btn small" data-a="rename">名前を変える</button>
+        ${m.banned ? '<button class="btn small" data-a="unban">停止を解く</button>' : '<button class="btn small" data-a="ban">停止する</button>'}
+        ${p.open ? '<button class="btn small" data-a="done">対応済みにする</button>' : ''}
+      </div>
+      ${open ? `<div class="list">${p.reports.slice().sort((a, b) => tsMs(b.d.at) - tsMs(a.d.at)).map((r) => `<div class="meta">${fmtMs(tsMs(r.d.at))}・${esc(REASONS[r.d.reason] || r.d.reason)}・そのときの名前「${esc(r.d.name)}」${r.d.handled ? '・対応済み' + (r.d.action ? '（' + esc(r.d.action) + '）' : '') : '・<b>未対応</b>'}</div>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('') : '<p class="msg">ありません</p>';
+  $('repList').querySelectorAll('[data-a]').forEach((b) => b.onclick = () => repAction(b.closest('[data-uid]').dataset.uid, b.dataset.a));
+}
+
+/** その人の未対応の通報に「対応済み」の印を付ける */
+async function markHandled(uid, action) {
+  const open = repDocs.filter((r) => r.d.target === uid && !r.d.handled);
+  for (const r of open) {
+    await FB.setDoc(r.ref, { handled: true, handledAt: FB.serverTimestamp(), action }, { merge: true });
+    r.d.handled = true; r.d.action = action;
+  }
+}
+
+async function repAction(uid, a) {
+  const p = repPeople().find((x) => x.uid === uid);
+  const who = nameByUid.get(uid) ?? p?.name ?? uid;
+  const m = modByUid.get(uid) || {};
+  const modRef = FB.doc(FB.db, 'moderation', uid);
+  try {
+    if (a === 'list') { repOpen.has(uid) ? repOpen.delete(uid) : repOpen.add(uid); renderReports(); return; }
+    if (a === 'warn') {
+      const top = Object.entries(p?.reasons || {}).sort((x, y) => y[1] - x[1])[0]?.[0] || 'other';
+      const text = await askText(`${who} に警告しますか`, ['この文が、相手のアプリに「運営からのお知らせ」として出ます（300 文字まで）。', '相手が「確認しました」を押すと、ここに「読んだ」と出ます。'], '警告を送る', WARN_TEXT[top]);
+      if (!text) return;
+      await FB.setDoc(modRef, { warnCount: (m.warnCount || 0) + 1, warnText: text, warnAt: FB.serverTimestamp(), updatedAt: FB.serverTimestamp() }, { merge: true });
+      await markHandled(uid, '警告');
+    } else if (a === 'rename') {
+      const now = nameByUid.get(uid) ?? p?.name ?? '';
+      if (!(await ask(`${who} の名前を変えますか`, [`いまの名前「${now}」を「${RENAME_TO}」に変えます。`, '相手は新しい名前を決めるまで遊べません。元の名前には戻せません。'], '名前を変える'))) return;
+      const b = FB.writeBatch(FB.db);
+      b.set(modRef, { renameRequired: true, renamedFrom: now, updatedAt: FB.serverTimestamp() }, { merge: true });
+      b.set(FB.doc(FB.db, 'users', uid), { name: RENAME_TO, updatedAt: FB.serverTimestamp() }, { merge: true });
+      await b.commit();
+      nameByUid.set(uid, RENAME_TO);
+      await markHandled(uid, '名前の変更');
+    } else if (a === 'ban') {
+      const reason = await askText(`${who} を停止しますか`, ['相手は遊べなくなり、問い合わせ先だけが出ます。対戦・フレンド申請・通報もできなくなります。', '下の理由が相手の画面に出ます（300 文字まで）。'], '停止する', '利用規約に反する行為が続いたため');
+      if (!reason) return;
+      await FB.setDoc(modRef, { banned: true, banReason: reason, bannedAt: FB.serverTimestamp(), updatedAt: FB.serverTimestamp() }, { merge: true });
+      await markHandled(uid, '停止');
+    } else if (a === 'unban') {
+      if (!(await ask(`${who} の停止を解きますか`, ['相手はまた遊べるようになります。'], '停止を解く'))) return;
+      await FB.setDoc(modRef, { banned: false, updatedAt: FB.serverTimestamp() }, { merge: true });
+    } else if (a === 'done') {
+      if (!(await ask(`${who} の通報を対応済みにしますか`, ['警告・名前の変更・停止はしません。問題なしとして片づけます。'], '対応済みにする'))) return;
+      await markHandled(uid, '問題なし');
+    }
+    await loadReports();
+  } catch (e) { alert(`できませんでした（${e.code || e.message}）`); }
+}
+
+async function loadReports() {
+  $('repList').innerHTML = '<p class="msg">読み込み中…</p>';
+  try {
+    const [rs, ms] = await Promise.all([
+      FB.getDocs(FB.query(FB.collection(FB.db, 'reports'), FB.orderBy('at', 'desc'))),
+      FB.getDocs(FB.collection(FB.db, 'moderation')),
+    ]);
+    repDocs = rs.docs.map((x) => ({ ref: x.ref, d: x.data() }));
+    modByUid = new Map(ms.docs.map((x) => [x.id, x.data()]));
+    // いまの名前（通報のときから変わっていることがある）
+    const uids = [...new Set([...repDocs.map((r) => r.d.target), ...modByUid.keys(), ...repExtra.keys()])];
+    await Promise.all(uids.map(async (uid) => {
+      try { const u = await FB.getDoc(FB.doc(FB.db, 'users', uid)); if (u.exists()) nameByUid.set(uid, u.data().name ?? ''); } catch {}
+    }));
+    renderReports();
+  } catch (e) { $('repList').innerHTML = `<p class="err">読み込めませんでした（${esc(e.code || e.message)}）</p>`; }
+}
+
+function startReports() {
+  $('repReload').onclick = loadReports;
+  $('repFilter').querySelectorAll('.chip').forEach((c) => c.onclick = () => {
+    repF = c.dataset.f;
+    $('repFilter').querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === c)));
+    renderReports();
+  });
+  // 通報が無くても、フレンドコードで探して対応できる
+  $('repLook').onclick = async () => {
+    $('repLookMsg').textContent = '探しています…';
+    const f = await findCode($('repCode').value).catch(() => null);
+    if (!f) { $('repLookMsg').innerHTML = '<span class="err">見つかりません</span>'; return; }
+    $('repLookMsg').textContent = `${f.name} を一覧の先頭に出しました`;
+    repExtra.set(f.uid, { name: f.name, code: f.code });
+    nameByUid.set(f.uid, f.name);
+    if (repF === 'banned') $('repFilter').querySelector('[data-f=open]').click();
+    else renderReports();
+  };
+  loadReports();
 }
 
 /* ---------- メール ---------- */
