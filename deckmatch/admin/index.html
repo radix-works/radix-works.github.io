@@ -781,13 +781,14 @@ const STONE_SIZES = [['small', '小'], ['mid', '中'], ['large', '大']];
  * 強化石は色 × 大きさの表に、名前はゲームの持ち物の呼び名にそろえた。ジェムは無償のジェム（有償ジェムはメールでは配らない）
  */
 const GIFT_GROUPS = [
-  ['通貨', [['gems', 'ジェム', 100000], ['coins', 'コイン', 10000000]]],
+  // コイン・ジェム・強化石の上限は 2026-10-14 に 100 倍へ（ユーザー指定「コイン ジェム 強化石の上限だけ大きく上げて」。アプリの serverMail.ts・firestore.rules と同じ値）
+  ['通貨', [['gems', 'ジェム', 10000000], ['coins', 'コイン', 1000000000]]],
   ['ガチャ券', [['tileTickets', 'タイル11回ガチャ券', 100], ['skinTickets', 'スキン11回ガチャ券', 100], ['commonTickets', '共通11回ガチャ券', 100], ['tileSingle', 'タイルガチャ券', 100], ['skinSingle', 'スキンガチャ券', 100], ['commonSingle', '共通ガチャ券', 100]]],
   ['回復', [['potionSmall', '回復薬（小）', 1000], ['potionMid', '回復薬（中）', 1000], ['potionLarge', '回復薬（大）', 1000], ['stamina', 'スタミナ', 1000]]],
   ['育成', [['exp', '経験値', 1000000], ['resetStones', 'リセット石', 100], ['shards', 'スキンのかけら', 10000], ['tilePoints', 'タイルのかけら', 100000]]],
   ['そのほか', [['skipTickets', 'スキップ券', 1000], ['medals', 'パーティーメダル', 10000], ['candy', 'キャンディ', 100000]]],
 ];
-const STONE_GIFTS = STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 1000]));
+const STONE_GIFTS = STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 100000]));
 const GIFTS = [...GIFT_GROUPS.flatMap(([, items]) => items), ...STONE_GIFTS];
 const numIn = (k, max, label) => `<input type="number" inputmode="numeric" min="0" max="${max}" id="g_${k}" aria-label="${esc(label)}">`;
 $('giftHost').innerHTML = GIFT_GROUPS.slice(0, 3).concat([['強化石']], GIFT_GROUPS.slice(3)).map(([g, items]) => items
