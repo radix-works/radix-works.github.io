@@ -396,7 +396,7 @@ const CATALOGS = {
     facets: [['kindLabel', '種類'], ['rarityLabel', '希少度'], ['priceLabel2', '入手'], ['shape', 'マッチの形']],
     tags: (x) => [x.kindLabel, x.rarityLabel, x.priceLabel, x.shape].filter(Boolean),
     line: (x) => x.note,
-    detail: (x) => [['種類', x.kindLabel], ['希少度', x.rarityLabel], ['入手・値段', x.priceLabel], ['id', x.id], ...(x.shape ? [['マッチの形', x.shape]] : [])],
+    detail: (x) => [['種類', x.kindLabel], ['希少度', x.rarityLabel], ['入手', x.priceLabel], ['id', x.id], ...(x.shape ? [['マッチの形', x.shape]] : [])],
     text: (x) => x.note,
     art: (x) => `<img alt="" loading="lazy" src="skin/${x.idx}.webp">`,
     rim: (x) => rimVars({ basic: 1, fine: 2, rare: 4, legend: 5 }[x.rarity] || 1),
