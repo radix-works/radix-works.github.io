@@ -790,11 +790,13 @@ const GIFT_GROUPS = [
   ['そのほか', [['skipTickets', 'スキップ券', 1000], ['medals', 'パーティーメダル', 10000], ['candy', 'キャンディ', 100000]]],
 ];
 const STONE_GIFTS = STONE_COLORS.flatMap(([c, cn]) => STONE_SIZES.map(([z, zn]) => [`stone_${c}_${z}`, `${cn}（${zn}）`, 100000]));
+// 虹の強化石（2026-10-30 根本さん「管理画面から虹の強化石をメールで送れない」。色も大きさも無い 1 種類。アプリの serverMail.ts の stone_rainbow）
+STONE_GIFTS.push(['stone_rainbow', '虹の強化石', 100000]);
 const GIFTS = [...GIFT_GROUPS.flatMap(([, items]) => items), ...STONE_GIFTS];
 const numIn = (k, max, label) => `<input type="number" inputmode="numeric" min="0" max="${max}" id="g_${k}" aria-label="${esc(label)}">`;
 $('giftHost').innerHTML = GIFT_GROUPS.slice(0, 3).concat([['強化石']], GIFT_GROUPS.slice(3)).map(([g, items]) => items
   ? `<div class="ggroup"><h3>${g}</h3><div class="gifts">${items.map(([k, l, max]) => `<label class="fld"><span class="lab">${l}</span>${numIn(k, max, l)}</label>`).join('')}</div></div>`
-  : `<div class="ggroup"><h3>${g}</h3><div class="stones"><span></span>${STONE_SIZES.map(([, zn]) => `<span class="lab">${zn}</span>`).join('')}${STONE_COLORS.map(([c, cn]) => `<span class="lab">${cn}</span>${STONE_SIZES.map(([z, zn]) => numIn(`stone_${c}_${z}`, 1000, `${cn}（${zn}）`)).join('')}`).join('')}</div></div>`,
+  : `<div class="ggroup"><h3>${g}</h3><div class="stones"><span></span>${STONE_SIZES.map(([, zn]) => `<span class="lab">${zn}</span>`).join('')}${STONE_COLORS.map(([c, cn]) => `<span class="lab">${cn}</span>${STONE_SIZES.map(([z, zn]) => numIn(`stone_${c}_${z}`, 1000, `${cn}（${zn}）`)).join('')}`).join('')}<span class="lab">虹の強化石</span>${numIn('stone_rainbow', 1000, '虹の強化石')}<span></span><span></span></div></div>`,
 ).join('') + `<div class="ggroup"><h3>タイル・スキン</h3>
   <div class="pick"><input type="search" id="pickQ" placeholder="タイル・スキンの名前で探す" autocomplete="off"><div class="pickres" id="pickRes" hidden></div></div>
   <div class="picked" id="picked"></div></div>`;
