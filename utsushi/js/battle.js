@@ -1,154 +1,66 @@
 // バトルの計算（画面とは切り離した純粋なロジック）
+// 3体 vs 3体。両者が3体ぶんの指示を出したらターン開始、6体がスピード順に動く。
 // オンライン対戦ではホスト側だけがこれを動かし、結果を相手に送る。
-import { MOVES, typeMult } from './data.js';
+import { SKILLS, SHAPE_SKILL, COLOR_SKILL, ENERGY, hueAdv, ADV_MULT } from './data.js';
 
 export function rngNext(state) {
-  // mulberry32（状態に種を持たせて再現できるようにする）
   let t = (state.seed = (state.seed + 0x6d2b79f5) >>> 0);
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-export function maxHpOf(mon) {
-  const base = mon.stats.hp * 2 + 60;
-  return Math.round(mon.ability === 'ookii' ? base * 1.12 : base);
-}
+export const MAX_TURNS = 30;
+export const maxHpOf = (mon) => mon.stats.hp * 2 + 60;
+export const skillsOf = (mon) => ['attack', SHAPE_SKILL[mon.shape], COLOR_SKILL[mon.color], 'guard'];
 
 function toFighter(mon) {
   const hp = maxHpOf(mon);
   return {
-    id: mon.id, name: mon.name, el: mon.element, ability: mon.ability,
-    stats: { ...mon.stats }, maxHp: hp, hp,
-    moves: mon.moves.map((k) => ({ key: k, pp: MOVES[k].pp })),
-    status: null, boosts: { atk: 0, def: 0, spd: 0 }, fresh: true,
+    name: mon.name, color: mon.color, hue: mon.hue, shape: mon.shape,
+    stats: { ...mon.stats }, maxHp: hp, hp, skills: skillsOf(mon),
+    charged: false, slowTurns: 0, dazzled: false,
   };
 }
 
 export function createBattle(teamA, teamB, seed) {
-  const state = {
+  return {
     seed: seed >>> 0, turn: 1, phase: 'select', winner: null,
     sides: [
-      { team: teamA.map(toFighter), active: 0, needReplace: false },
-      { team: teamB.map(toFighter), active: 0, needReplace: false },
+      { team: teamA.map(toFighter), energy: ENERGY.start },
+      { team: teamB.map(toFighter), energy: ENERGY.start },
     ],
   };
-  const events = [];
-  for (let s = 0; s < 2; s++) onEnter(state, s, events);
-  return { state, events };
 }
 
-const stageMult = (s) => (s >= 0 ? (2 + s) / 2 : 2 / (2 - s));
-export function effStat(f, stat) {
-  let v = f.stats[stat] * stageMult(f.boosts[stat] || 0);
-  if (stat === 'atk' && f.status === 'burn') v *= 0.75;
-  if (stat === 'spd' && f.status === 'para') v *= 0.5;
-  return v;
-}
-export const activeOf = (state, s) => state.sides[s].team[state.sides[s].active];
+export const aliveIdx = (side) => side.team.map((f, i) => (f.hp > 0 ? i : -1)).filter((i) => i >= 0);
+export const speedOf = (f) => f.stats.spd * (f.slowTurns > 0 ? 0.7 : 1);
+export const needsTarget = (key) => SKILLS[key].target === 'enemy' || SKILLS[key].target === 'ally';
 
-function onEnter(state, s, ev) {
-  const f = activeOf(state, s);
-  f.fresh = true;
-  ev.push({ t: 'enter', side: s, idx: state.sides[s].active, name: f.name });
-  if (f.ability === 'nobi') changeStage(state, s, 'spd', 1, ev, 'のっぽ');
-  if (f.ability === 'kagemono') {
-    const o = activeOf(state, 1 - s);
-    if (o && o.hp > 0) changeStage(state, 1 - s, 'atk', -1, ev, 'いあつかん');
+// 1体ぶんの指示が正しいか
+export function cmdValid(state, s, i, cmd) {
+  const f = state.sides[s].team[i];
+  if (f.hp <= 0) return cmd == null;
+  if (!cmd || !f.skills.includes(cmd.skill)) return false;
+  const sk = SKILLS[cmd.skill];
+  if (sk.target === 'enemy') { const t = state.sides[1 - s].team[cmd.target]; return !!t && t.hp > 0; }
+  if (sk.target === 'ally') {
+    const t = state.sides[s].team[cmd.target];
+    if (!t || t.hp <= 0) return false;
+    return !(cmd.skill === 'cover' && cmd.target === i);
   }
+  return true;
 }
-
-function changeStage(state, s, stat, delta, ev, cause) {
-  const f = activeOf(state, s);
-  const before = f.boosts[stat];
-  f.boosts[stat] = Math.max(-3, Math.min(3, before + delta));
-  ev.push({ t: 'boost', side: s, stat, delta: f.boosts[stat] - before, cause });
+export const cmdsCost = (cmds) => cmds.reduce((a, c) => a + (c ? SKILLS[c.skill].cost : 0), 0);
+export function cmdsValid(state, s, cmds) {
+  if (!Array.isArray(cmds) || cmds.length !== 3) return false;
+  for (let i = 0; i < 3; i++) if (!cmdValid(state, s, i, cmds[i])) return false;
+  return cmdsCost(cmds) <= state.sides[s].energy;
 }
-
-export function legalActions(state, s) {
-  const side = state.sides[s];
-  const f = activeOf(state, s);
-  const switches = side.team.map((m, i) => ({ type: 'switch', to: i }))
-    .filter((a) => a.to !== side.active && side.team[a.to].hp > 0);
-  if (state.phase === 'replace') return side.needReplace ? switches : [];
-  const moves = f.moves.map((m, i) => ({ type: 'move', idx: i })).filter((a) => f.moves[a.idx].pp > 0);
-  return moves.length ? [...moves, ...switches] : [{ type: 'move', idx: -1 }, ...switches];
-}
-
-export function isLegal(state, s, a) {
-  return legalActions(state, s).some((x) => x.type === a.type && (x.idx === a.idx) && (x.to === a.to));
-}
-
-function damageCalc(state, atkSide, mv) {
-  const a = activeOf(state, atkSide);
-  const d = activeOf(state, 1 - atkSide);
-  let crit = (mv.crit || 0.0625) + (a.ability === 'togatta' ? 0.12 : 0);
-  const isCrit = rngNext(state) < crit;
-  const atk = isCrit ? Math.max(effStat(a, 'atk'), a.stats.atk) : effStat(a, 'atk');
-  const def = isCrit ? Math.min(effStat(d, 'def'), d.stats.def) : effStat(d, 'def');
-  let dmg = (22 * mv.pow * (atk / def)) / 30 + 2;
-  if (mv.el && mv.el === a.el) dmg *= a.ability === 'shinpuru' ? 1.6 : 1.5;
-  let mult = typeMult(mv.el, d.el);
-  if (mult > 1 && d.ability === 'colorful') mult = 1.5;
-  dmg *= mult;
-  if (isCrit) dmg *= 1.5;
-  if (d.ability === 'marui') dmg *= 0.85;
-  dmg *= 0.85 + rngNext(state) * 0.15;
-  return { dmg: Math.max(1, Math.floor(dmg)), mult, isCrit };
-}
-
-function useMove(state, s, idx, ev) {
-  const a = activeOf(state, s);
-  const d = activeOf(state, 1 - s);
-  let mv;
-  if (idx < 0) mv = { name: 'わるあがき', el: null, kind: 'atk', pow: 40, acc: 100 };
-  else { a.moves[idx].pp--; mv = MOVES[a.moves[idx].key]; }
-
-  if (a.status === 'para' && rngNext(state) < 0.25) {
-    ev.push({ t: 'skip', side: s, reason: 'しびれて動けない！' });
-    return;
-  }
-  ev.push({ t: 'move', side: s, name: mv.name, el: mv.el, kind: mv.kind });
-
-  if (mv.kind === 'heal') {
-    const amt = Math.min(a.maxHp - a.hp, Math.round(a.maxHp * mv.ratio));
-    a.hp += amt;
-    ev.push({ t: 'heal', side: s, amount: amt, hp: a.hp });
-    return;
-  }
-  if (mv.kind === 'buff') { changeStage(state, s, mv.stat, mv.stages, ev); return; }
-  if (mv.kind === 'debuff') { changeStage(state, 1 - s, mv.stat, mv.stages, ev); return; }
-
-  if (rngNext(state) * 100 >= mv.acc) { ev.push({ t: 'miss', side: s }); return; }
-  const { dmg, mult, isCrit } = damageCalc(state, s, mv);
-  const real = Math.min(d.hp, dmg);
-  d.hp -= real;
-  ev.push({ t: 'dmg', side: 1 - s, amount: real, hp: d.hp, mult, crit: isCrit });
-  if (mv.drain && real > 0) {
-    const amt = Math.min(a.maxHp - a.hp, Math.round(real * mv.drain));
-    if (amt > 0) { a.hp += amt; ev.push({ t: 'heal', side: s, amount: amt, hp: a.hp }); }
-  }
-  if (d.hp <= 0) { ev.push({ t: 'faint', side: 1 - s, name: d.name }); return; }
-  if (!d.status) {
-    if (mv.burn && d.el !== 'fire' && rngNext(state) < mv.burn) { d.status = 'burn'; ev.push({ t: 'status', side: 1 - s, st: 'burn' }); }
-    else if (mv.para && d.el !== 'bolt' && rngNext(state) < mv.para) { d.status = 'para'; ev.push({ t: 'status', side: 1 - s, st: 'para' }); }
-  }
-}
-
-function doSwitch(state, s, to, ev) {
-  const side = state.sides[s];
-  const out = activeOf(state, s);
-  out.boosts = { atk: 0, def: 0, spd: 0 };
-  ev.push({ t: 'withdraw', side: s, name: out.name });
-  side.active = to;
-  onEnter(state, s, ev);
-}
-
-const alive = (side) => side.team.some((m) => m.hp > 0);
 
 function checkEnd(state, ev) {
-  const a0 = alive(state.sides[0]);
-  const a1 = alive(state.sides[1]);
+  const a0 = aliveIdx(state.sides[0]).length > 0;
+  const a1 = aliveIdx(state.sides[1]).length > 0;
   if (a0 && a1) return false;
   state.phase = 'end';
   state.winner = a0 ? 0 : a1 ? 1 : -1;
@@ -156,122 +68,177 @@ function checkEnd(state, ev) {
   return true;
 }
 
-function priorityOf(state, s, act) {
-  if (act.type === 'switch') return 10;
-  if (act.idx < 0) return 0;
-  return MOVES[activeOf(state, s).moves[act.idx].key].prio || 0;
+function hitOnce(state, s, i, ti, sk, ev, tmp, charged) {
+  const a = state.sides[s].team[i];
+  const ds = 1 - s;
+  let target = ti;
+  let coverCut = 1;
+  const cov = tmp[ds].coveredBy[ti];
+  if (!sk.pierce && cov != null && cov !== ti && state.sides[ds].team[cov].hp > 0) { target = cov; coverCut = 0.7; }
+  const d = state.sides[ds].team[target];
+  const adv = hueAdv(a.hue, d.hue);
+  let dmg = 34 * (sk.power || 1) * (a.stats.pow / d.stats.grd) * ADV_MULT[adv] * coverCut;
+  if (charged) dmg *= 2;
+  if (sk.ambush && !tmp[ds].acted[target]) dmg *= 2;
+  if (!sk.pierce && tmp[ds].guarding[target]) dmg *= 0.5;
+  if (!sk.pierce && tmp[ds].barrier) dmg *= 0.6;
+  const crit = rngNext(state) < 0.08;
+  if (crit) dmg *= 1.5;
+  dmg *= 0.9 + rngNext(state) * 0.2;
+  const real = Math.min(d.hp, Math.max(1, Math.floor(dmg)));
+  d.hp -= real;
+  ev.push({ t: 'hit', side: ds, i: target, amount: real, hp: d.hp, adv, crit, cover: target !== ti });
+  if (d.hp <= 0) ev.push({ t: 'down', side: ds, i: target });
+  return { real, target };
 }
 
-// 選択フェーズ：両者の行動を受け取り 1 ターン進める
-export function resolveTurn(state, acts) {
-  const ev = [];
-  if (state.phase === 'replace') return resolveReplace(state, acts, ev);
-  ev.push({ t: 'turn', turn: state.turn });
-  const order = [0, 1].sort((x, y) => {
-    const p = priorityOf(state, y, acts[y]) - priorityOf(state, x, acts[x]);
-    if (p) return p;
-    const sp = effStat(activeOf(state, y), 'spd') - effStat(activeOf(state, x), 'spd');
-    if (sp) return sp;
-    return 0;
-  });
-  if (priorityOf(state, 0, acts[0]) === priorityOf(state, 1, acts[1]) &&
-      effStat(activeOf(state, 0), 'spd') === effStat(activeOf(state, 1), 'spd') && rngNext(state) < 0.5) order.reverse();
+function perform(state, s, i, cmd, ev, tmp) {
+  const side = state.sides[s];
+  const a = side.team[i];
+  const sk = SKILLS[cmd.skill];
+  const foe = state.sides[1 - s];
+  if (a.dazzled) {
+    a.dazzled = false;
+    if (rngNext(state) < 0.4) { ev.push({ t: 'fail', side: s, i }); return; }
+  }
+  ev.push({ t: 'act', side: s, i, skill: cmd.skill });
 
-  for (const s of order) {
-    const f = activeOf(state, s);
-    if (f.hp <= 0) continue;
-    const act = acts[s];
-    if (act.type === 'switch') doSwitch(state, s, act.to, ev);
+  if (sk.power) {
+    const charged = a.charged; a.charged = false;
+    let targets;
+    if (sk.target === 'allEnemies') targets = aliveIdx(foe);
     else {
-      if (activeOf(state, 1 - s).hp <= 0) continue;
-      useMove(state, s, act.idx, ev);
+      let t = cmd.target;
+      if (foe.team[t].hp <= 0) { const al = aliveIdx(foe); t = al[Math.floor(rngNext(state) * al.length)]; }
+      targets = [t];
     }
+    let dealt = 0;
+    for (const t of targets) {
+      for (let h = 0; h < (sk.hits || 1); h++) {
+        if (foe.team[t].hp <= 0) break;
+        const r = hitOnce(state, s, i, t, sk, ev, tmp, charged);
+        dealt += r.real;
+        if (sk.slow && foe.team[r.target].hp > 0) { foe.team[r.target].slowTurns = 2; ev.push({ t: 'status', side: 1 - s, i: r.target, st: 'slow' }); }
+      }
+    }
+    if (sk.drain && dealt > 0 && a.hp > 0) {
+      const amt = Math.min(a.maxHp - a.hp, Math.round(dealt * sk.drain));
+      if (amt > 0) { a.hp += amt; ev.push({ t: 'heal', side: s, i, amount: amt, hp: a.hp }); }
+    }
+    return;
+  }
+  if (sk.heal) {
+    let t = cmd.target;
+    if (side.team[t].hp <= 0) t = i;
+    const f = side.team[t];
+    const amt = Math.min(f.maxHp - f.hp, Math.round(f.maxHp * sk.heal));
+    f.hp += amt;
+    ev.push({ t: 'heal', side: s, i: t, amount: amt, hp: f.hp });
+    return;
+  }
+  if (sk.dazzle) {
+    for (const t of aliveIdx(foe)) { foe.team[t].dazzled = true; ev.push({ t: 'status', side: 1 - s, i: t, st: 'dazzle' }); }
+    return;
+  }
+  if (cmd.skill === 'charge') { a.charged = true; ev.push({ t: 'status', side: s, i, st: 'charge' }); }
+}
+
+export function resolveTurn(state, allCmds) {
+  const ev = [{ t: 'turn', turn: state.turn }];
+  const tmp = [0, 1].map(() => ({ guarding: [], coveredBy: [], acted: [], barrier: false }));
+
+  // ⚡ を払う
+  for (const s of [0, 1]) {
+    const side = state.sides[s];
+    side.energy -= cmdsCost(allCmds[s]);
+    const guards = allCmds[s].filter((c) => c && c.skill === 'guard').length;
+    side.energy = Math.min(ENERGY.max, side.energy + guards);
+  }
+  // ターン最初に発動するもの（ガード・たてになる・バリア）
+  const queue = [];
+  for (const s of [0, 1]) {
+    allCmds[s].forEach((cmd, i) => {
+      if (!cmd || state.sides[s].team[i].hp <= 0) return;
+      const sk = SKILLS[cmd.skill];
+      if (!sk.first) { queue.push({ s, i, cmd, r: rngNext(state) }); return; }
+      tmp[s].acted[i] = true;
+      if (cmd.skill === 'guard') { tmp[s].guarding[i] = true; ev.push({ t: 'guard', side: s, i }); }
+      else if (cmd.skill === 'cover') { tmp[s].coveredBy[cmd.target] = i; tmp[s].guarding[i] = false; ev.push({ t: 'cover', side: s, i, ally: cmd.target }); }
+      else if (cmd.skill === 'barrier') { tmp[s].barrier = true; ev.push({ t: 'barrier', side: s, i }); }
+    });
+  }
+  // スピード順
+  queue.sort((x, y) => speedOf(state.sides[y.s].team[y.i]) - speedOf(state.sides[x.s].team[x.i]) || x.r - y.r);
+  for (const q of queue) {
+    if (state.sides[q.s].team[q.i].hp <= 0) continue;
+    perform(state, q.s, q.i, q.cmd, ev, tmp);
+    tmp[q.s].acted[q.i] = true;
     if (checkEnd(state, ev)) return { state, events: ev };
   }
-
-  // ターン終わりの処理
-  for (const s of order) {
-    const f = activeOf(state, s);
-    if (f.hp <= 0) continue;
-    if (f.status === 'burn') {
-      const amt = Math.min(f.hp, Math.max(1, Math.floor(f.maxHp / 12)));
-      f.hp -= amt;
-      ev.push({ t: 'dmg', side: s, amount: amt, hp: f.hp, mult: 1, burn: true });
-      if (f.hp <= 0) ev.push({ t: 'faint', side: s, name: f.name });
-    } else if (f.ability === 'kirakira' && f.hp < f.maxHp) {
-      const amt = Math.min(f.maxHp - f.hp, Math.max(1, Math.floor(f.maxHp / 16)));
-      f.hp += amt;
-      ev.push({ t: 'heal', side: s, amount: amt, hp: f.hp, cause: 'キラキラ' });
-    }
-    f.fresh = false;
-  }
-  if (checkEnd(state, ev)) return { state, events: ev };
-  state.turn++;
-  setReplace(state);
-  return { state, events: ev };
-}
-
-function setReplace(state) {
-  let need = false;
+  // ターン終わり
   for (const side of state.sides) {
-    side.needReplace = side.team[side.active].hp <= 0 && alive(side);
-    need = need || side.needReplace;
+    for (const f of side.team) if (f.slowTurns > 0) f.slowTurns--;
+    side.energy = Math.min(ENERGY.max, side.energy + ENERGY.perTurn);
   }
-  state.phase = need ? 'replace' : 'select';
-}
-
-function resolveReplace(state, acts, ev) {
-  for (let s = 0; s < 2; s++) {
-    const side = state.sides[s];
-    if (!side.needReplace) continue;
-    side.active = acts[s].to;
-    side.needReplace = false;
+  ev.push({ t: 'energy', values: state.sides.map((x) => x.energy) });
+  state.turn++;
+  if (state.turn > MAX_TURNS) {
+    // 時間切れ：残り体力の割合で判定
+    const ratio = state.sides.map((sd) => sd.team.reduce((a, f) => a + f.hp / f.maxHp, 0));
+    state.phase = 'end';
+    state.winner = ratio[0] > ratio[1] ? 0 : ratio[1] > ratio[0] ? 1 : -1;
+    ev.push({ t: 'end', winner: state.winner, timeup: true });
   }
-  // 両方そろってから登場処理（いあつかんの順番を公平にするため速い方から）
-  const order = [0, 1].filter((s) => acts[s]);
-  for (const s of order) onEnter(state, s, ev);
-  state.phase = 'select';
   return { state, events: ev };
 }
 
 // ===== CPU の思考 =====
-export function cpuChoose(state, s) {
-  const acts = legalActions(state, s);
-  const me = activeOf(state, s);
-  const foe = activeOf(state, 1 - s);
-  if (state.phase === 'replace') {
-    // 相手に有利な子を出す
-    let best = acts[0]; let bestScore = -1e9;
-    for (const a of acts) {
-      const m = state.sides[s].team[a.to];
-      const sc = matchScore(m, foe) + m.hp / m.maxHp;
-      if (sc > bestScore) { bestScore = sc; best = a; }
+export function cpuCommands(state, s) {
+  const side = state.sides[s], foe = state.sides[1 - s];
+  let budget = side.energy;
+  const foes = aliveIdx(foe);
+  const cmds = [null, null, null];
+  // 一番弱っている相手を狙いがち
+  const weakest = foes.slice().sort((a, b) => foe.team[a].hp - foe.team[b].hp)[0];
+  const order = aliveIdx(side).sort(() => rngNext(state) - 0.5);
+  for (const i of order) {
+    const f = side.team[i];
+    const opts = [];
+    for (const key of f.skills) {
+      const sk = SKILLS[key];
+      if (sk.cost > budget) continue;
+      if (sk.target === 'enemy') {
+        for (const t of foes) {
+          const d = foe.team[t];
+          let sc = (sk.power || 1) * (sk.hits || 1) * ADV_MULT[hueAdv(f.hue, d.hue)] * 40 * (f.stats.pow / d.stats.grd);
+          if (f.charged) sc *= 2;
+          if (t === weakest) sc += 12;
+          if (sk.ambush) sc *= 1.4;
+          sc -= sk.cost * 6;
+          opts.push({ c: { skill: key, target: t }, sc, cost: sk.cost });
+        }
+      } else if (sk.target === 'allEnemies') {
+        const sc = sk.power ? sk.power * foes.length * 36 - sk.cost * 6 : foes.length * 14 - sk.cost * 4;
+        opts.push({ c: { skill: key, target: null }, sc, cost: sk.cost });
+      } else if (key === 'mend') {
+        for (const t of aliveIdx(side)) {
+          const a = side.team[t];
+          const lack = 1 - a.hp / a.maxHp;
+          opts.push({ c: { skill: key, target: t }, sc: lack > 0.4 ? 60 * lack + 20 : -20, cost: sk.cost });
+        }
+      } else if (key === 'cover') {
+        for (const t of aliveIdx(side)) if (t !== i) {
+          const a = side.team[t];
+          opts.push({ c: { skill: key, target: t }, sc: a.hp < a.maxHp * 0.35 && f.hp > f.maxHp * 0.5 ? 50 : -10, cost: sk.cost });
+        }
+      } else if (key === 'guard') opts.push({ c: { skill: key, target: null }, sc: f.hp < f.maxHp * 0.3 ? 30 : 8, cost: 0 });
+      else if (key === 'charge') opts.push({ c: { skill: key, target: null }, sc: f.charged ? -50 : 30, cost: sk.cost });
+      else if (key === 'barrier') opts.push({ c: { skill: key, target: null }, sc: 30, cost: sk.cost });
     }
-    return best;
+    for (const o of opts) o.sc += rngNext(state) * 14;
+    opts.sort((x, y) => y.sc - x.sc);
+    const pick = opts[0];
+    cmds[i] = pick.c; budget -= pick.cost;
   }
-  const scored = acts.map((a) => {
-    let sc;
-    if (a.type === 'switch') {
-      const m = state.sides[s].team[a.to];
-      sc = (matchScore(m, foe) - matchScore(me, foe)) * 30 - 25 + (m.hp / m.maxHp) * 10;
-    } else if (a.idx < 0) sc = 10;
-    else {
-      const mv = MOVES[me.moves[a.idx].key];
-      if (mv.kind === 'atk') {
-        const est = mv.pow * typeMult(mv.el, foe.el) * (mv.el === me.el ? 1.5 : 1) * (mv.acc / 100);
-        sc = est * (effStat(me, 'atk') / Math.max(1, effStat(foe, 'def'))) / 2;
-        if (est * 0.4 >= foe.hp) sc += 20;
-        if (mv.prio && foe.hp < foe.maxHp * 0.25) sc += 40;
-      } else if (mv.kind === 'heal') sc = me.hp < me.maxHp * 0.45 ? 60 : -10;
-      else if (mv.kind === 'buff') sc = me.boosts[mv.stat] < 2 && me.hp > me.maxHp * 0.6 ? 32 : -5;
-      else sc = foe.boosts[mv.stat] > -2 ? 25 : -5;
-    }
-    return { a, sc: sc + rngNext(state) * 14 };
-  });
-  scored.sort((x, y) => y.sc - x.sc);
-  return scored[0].a;
-}
-
-function matchScore(m, foe) {
-  return typeMult(m.el, foe.el) - typeMult(foe.el, m.el);
+  return cmds;
 }
