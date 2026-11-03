@@ -1,5 +1,5 @@
-// 切り抜いた画像から、属性・ステータス・わざ・とくせい・名前を決める
-import { MOVE_POOL, RARITY } from './data.js';
+// 切り抜いた画像から、色・かたち・ステータス・名前を決める
+import { RARITY } from './data.js';
 
 function rgb2hsv(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -75,36 +75,33 @@ export function analyze(canvas, coverage) {
   };
 }
 
-function pickElement(f) {
-  if (f.chromaRatio < 0.22) {
-    return f.val > 0.55 ? 'light' : 'dark';
+// 主な色：彩りの少ない物は白か黒、それ以外は色相（角度）を求めて5色に分ける
+function pickColor(f) {
+  if (f.chromaRatio < 0.22) return { color: f.val > 0.55 ? 'white' : 'black', hue: null };
+  let best = 0;
+  f.hueHist.forEach((v, i) => { if (v > f.hueHist[best]) best = i; });
+  // 一番多いビンと両隣で、角度の重み付き平均
+  let x = 0, y = 0;
+  for (const k of [-1, 0, 1]) {
+    const i = (best + k + 12) % 12, a = ((i * 30 + 15) * Math.PI) / 180;
+    x += Math.cos(a) * f.hueHist[i]; y += Math.sin(a) * f.hueHist[i];
   }
-  // 30度ずつの色相ビンを属性にまとめる
-  const sc = { fire: 0, bolt: 0, leaf: 0, water: 0, dark: 0, light: 0 };
-  f.hueHist.forEach((v, i) => {
-    const deg = i * 30 + 15;
-    if (deg < 40 || deg >= 340) sc.fire += v;
-    else if (deg < 70) sc.bolt += v * 1.15;
-    else if (deg < 165) sc.leaf += v;
-    else if (deg < 255) sc.water += v;
-    else if (deg < 300) sc.dark += v;
-    else sc.light += v;
-  });
-  return Object.entries(sc).sort((a, b) => b[1] - a[1])[0][0];
+  const hue = Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
+  let color;
+  if (hue < 40 || hue >= 330) color = 'red';
+  else if (hue < 75) color = 'yellow';
+  else if (hue < 165) color = 'green';
+  else if (hue < 255) color = 'blue';
+  else color = 'purple';
+  return { color, hue };
 }
 
-function pickAbility(f, el) {
-  const c = [];
-  if (f.fill > 0.72 && f.aspect > 0.75 && f.aspect < 1.35) c.push(['marui', f.fill]);
-  if (f.jag > 0.35 || f.edge > 0.55) c.push(['togatta', Math.max(f.jag, f.edge)]);
-  if (f.aspect > 1.6 || f.aspect < 0.55) c.push(['nobi', Math.abs(Math.log(f.aspect)) / 1.2]);
-  if (f.coverage > 0.45) c.push(['ookii', f.coverage]);
-  if (f.variety > 0.62) c.push(['colorful', f.variety]);
-  if (f.val > 0.72) c.push(['kirakira', f.val]);
-  if (f.val < 0.32 || el === 'dark') c.push(['kagemono', 1 - f.val]);
-  if (!c.length) return 'shinpuru';
-  c.sort((a, b) => b[1] - a[1]);
-  return c[f.hash % Math.min(2, c.length)][0];
+function pickShape(f) {
+  if (f.aspect > 1.6 || f.aspect < 0.55) return 'long';
+  if (f.jag > 0.35 || f.edge > 0.55) return 'spiky';
+  if (f.fill > 0.72 && f.aspect > 0.75 && f.aspect < 1.35) return 'round';
+  if (f.coverage > 0.45) return 'big';
+  return 'plain';
 }
 
 function pickRarity(f) {
@@ -116,71 +113,46 @@ function pickRarity(f) {
   return 'N';
 }
 
-function pickStats(f, rarity) {
-  const slender = Math.min(1, Math.abs(Math.log(f.aspect)) / 1.1);
+function pickStats(f, rarity, shape) {
   const w = {
-    hp:  0.8 + f.coverage * 1.4 + f.fill * 0.9,
-    atk: 0.8 + f.edge * 1.3 + f.sat * 0.9 + f.jag * 0.6,
-    def: 0.8 + f.fill * 1.2 + (1 - f.val) * 0.8,
-    spd: 0.8 + slender * 1.3 + (1 - f.coverage) * 0.6 + f.val * 0.4,
+    hp:  0.8 + f.coverage * 1.2 + f.fill * 0.6,
+    pow: 0.8 + f.edge * 1.1 + f.sat * 0.8 + f.jag * 0.5,
+    grd: 0.8 + f.fill * 1.0 + (1 - f.val) * 0.6,
+    spd: 0.8 + (1 - f.coverage) * 0.6 + f.val * 0.5,
   };
-  // 写真ごとの個性（ゆらぎ）
+  // かたちの得意分野
+  const bias = { round: 'grd', spiky: 'pow', long: 'spd', big: 'hp' }[shape];
+  if (bias) w[bias] += 0.7;
   let hs = f.hash;
   for (const k of Object.keys(w)) { hs = Math.imul(hs ^ (hs >>> 13), 0x5bd1e995) >>> 0; w[k] *= 0.88 + (hs % 1000) / 1000 * 0.24; }
   const total = RARITY[rarity].total;
   const min = 45, free = total - min * 4;
-  const sum = w.hp + w.atk + w.def + w.spd;
+  const sum = w.hp + w.pow + w.grd + w.spd;
   const st = {};
   for (const k of Object.keys(w)) st[k] = Math.min(140, Math.round(min + (free * w[k]) / sum));
   return st;
 }
 
-function pickMoves(el, stats, hash) {
-  const pool = MOVE_POOL[el];
-  const pick = (arr, salt) => arr[(hash >>> salt) % arr.length];
-  const moves = [];
-  // すばやい子は先制わざ、こうげきが高い子は大技を覚えやすい
-  moves.push(stats.spd >= stats.atk && pool.weak.length > 1 ? pool.weak[1] : pick(pool.weak, 3));
-  moves.push(stats.atk >= 80 || (hash & 3) === 0 ? pick(pool.big, 5) : pick(pool.mid, 5));
-  const neutral = ['taiatari', 'kiai', 'teppeki', 'kosoku', 'saisei', 'niramu'];
-  let third;
-  if ((hash >>> 9) % 3 === 0) third = pool.sup[0];
-  else if (stats.def > stats.atk) third = (hash >>> 11) % 2 ? 'teppeki' : 'saisei';
-  else if (stats.spd < 65) third = 'kosoku';
-  else third = neutral[(hash >>> 7) % neutral.length];
-  if (moves.includes(third)) third = 'taiatari';
-  moves.push(third);
-  // 大技を持っていない子は中技も持つ
-  return moves;
-}
-
+// 名前：色の音 ＋ かたちの音（モノに宿った「ウツシ」らしい響き）
 const NAME_HEAD = {
-  fire: ['ホムラ', 'ヒノ', 'カエン', 'ボル', 'アカ'],
-  water: ['アクア', 'ミナ', 'シズ', 'ナミ', 'ラム'],
-  leaf: ['リーフ', 'モリ', 'ハッパ', 'コケ', 'ミド'],
-  bolt: ['ライ', 'ビリ', 'イナズ', 'ピカ', 'ゴロ'],
-  light: ['ルミ', 'キラ', 'ヒカ', 'ステラ', 'シロ'],
-  dark: ['ヤミ', 'カゲ', 'ノクス', 'クロ', 'ヨル'],
+  red: ['アカ', 'ベニ', 'ヒイロ', 'アケ'], yellow: ['キナ', 'ヤマブ', 'コガネ', 'ヒマ'], green: ['アオバ', 'モエギ', 'ワカ', 'ミドリ'],
+  blue: ['ソラ', 'アイ', 'ルリ', 'ミズ'], purple: ['フジ', 'スミレ', 'ムラ', 'キキョ'], white: ['シロ', 'ユキ', 'マシロ', 'ハク'], black: ['クロ', 'スミ', 'ヨル', 'ウルシ'],
 };
 const NAME_TAIL = {
-  marui: ['マル', 'ポン', 'コロ'], togatta: ['トゲ', 'ガル', 'ザン'], nobi: ['ノッポ', 'タワー', 'ロング'],
-  ookii: ['ドン', 'ゴン', 'ギガ'], colorful: ['パレ', 'ニジ', 'ミックス'], kirakira: ['リン', 'ティア', 'スター'],
-  kagemono: ['ガ', 'ジン', 'ロス'], shinpuru: ['ン', 'ル', 'ボ'],
+  round: ['まる', 'たま', 'ころ'], spiky: ['とげ', 'きば', 'つの'], long: ['ぼう', 'すけ', 'のび'], big: ['どん', 'ぶち', 'だい'], plain: ['ぴ', 'こ', 'ぼん'],
 };
 
 export function makeCreature(canvas, coverage, imgDataUrl, opts = {}) {
   const f = analyze(canvas, coverage);
-  const element = opts.element || pickElement(f);
-  const ability = pickAbility(f, element);
+  const { color, hue } = opts.color ? { color: opts.color, hue: opts.hue ?? null } : pickColor(f);
+  const shape = opts.shape || pickShape(f);
   const rarity = pickRarity(f);
-  const stats = pickStats(f, rarity);
-  const moves = pickMoves(element, stats, f.hash);
-  const head = NAME_HEAD[element][f.hash % NAME_HEAD[element].length];
-  const tail = NAME_TAIL[ability][(f.hash >>> 4) % NAME_TAIL[ability].length];
+  const stats = pickStats(f, rarity, shape);
+  const head = NAME_HEAD[color][f.hash % NAME_HEAD[color].length];
+  const tail = NAME_TAIL[shape][(f.hash >>> 4) % NAME_TAIL[shape].length];
   return {
-    id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    name: head + tail, element, ability, rarity, stats, moves,
+    id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: head + tail, color, hue, shape, rarity, stats,
     img: imgDataUrl, created: Date.now(),
-    features: { fill: +f.fill.toFixed(2), aspect: +f.aspect.toFixed(2), edge: +f.edge.toFixed(2), sat: +f.sat.toFixed(2), val: +f.val.toFixed(2) },
   };
 }

@@ -1,8 +1,9 @@
-// 写真がなくても遊べる「おためしモンスター」と CPU のモンスターを絵で作る
+// 写真がなくても遊べる「おためしウツシ」と CPU のウツシを、絵で作る
 import { makeCreature } from './creature.js';
 import { canvasToDataUrl } from './cutout.js';
 
-const HUES = { fire: [12, 0.9, 0.95], water: [208, 0.8, 0.95], leaf: [125, 0.7, 0.8], bolt: [48, 0.9, 1], light: [0, 0, 0.97], dark: [265, 0.45, 0.28] };
+const TONE = { red: [8, 0.85, 0.55], yellow: [48, 0.95, 0.55], green: [130, 0.6, 0.45], blue: [212, 0.8, 0.55], purple: [278, 0.6, 0.55], white: [220, 0.1, 0.92], black: [230, 0.15, 0.22] };
+const HUE_OF = { red: 8, yellow: 48, green: 130, blue: 212, purple: 278 };
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -10,61 +11,57 @@ function rng(seed) {
 }
 const hsl = (h, s, l) => `hsl(${h} ${s * 100}% ${l * 100}%)`;
 
-export function drawMonster(el, seed) {
+// モノの形を描く（ボール・えんぴつ・星・箱・しずく）
+export function drawObject(color, shape, seed) {
   const r = rng(seed);
   const c = document.createElement('canvas'); c.width = 300; c.height = 300;
   const g = c.getContext('2d');
-  const [h0, s, v] = HUES[el];
-  const h = (h0 + (r() - 0.5) * 16 + 360) % 360;
-  const l = v * (1 - s / 2);
-  const shape = Math.floor(r() * 4);
-  const cx = 150, cy = 160;
-  const rx = 80 + r() * 30, ry = shape === 2 ? 115 : 75 + r() * 30;
+  const [h, s, l] = TONE[color];
+  const main = hsl(h, s, l), light = hsl(h, s, Math.min(0.95, l + 0.22)), dark = hsl(h, s, l * 0.55);
+  g.lineJoin = 'round'; g.lineWidth = 7; g.strokeStyle = dark;
+  let eyeY = 150, eyeX = 34;
   g.beginPath();
-  if (shape === 1) { // とげとげ
-    const n = 9 + Math.floor(r() * 5);
+  if (shape === 'round') { // ボール
+    g.arc(150, 150, 105, 0, Math.PI * 2); fillGrad(g, main, light, dark);
+    g.save(); g.clip(); g.fillStyle = light; g.globalAlpha = 0.55; g.fillRect(40, 175, 220, 26); g.restore();
+    g.beginPath(); g.arc(150, 150, 105, 0, Math.PI * 2); g.stroke();
+  } else if (shape === 'long') { // えんぴつ
+    g.moveTo(112, 20); g.lineTo(188, 20); g.lineTo(188, 220); g.lineTo(150, 285); g.lineTo(112, 220); g.closePath();
+    fillGrad(g, main, light, dark); g.stroke();
+    g.beginPath(); g.moveTo(112, 220); g.lineTo(188, 220); g.lineTo(150, 285); g.closePath(); g.fillStyle = '#f2d2a0'; g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(138, 265); g.lineTo(162, 265); g.lineTo(150, 285); g.closePath(); g.fillStyle = '#333'; g.fill();
+    eyeY = 110; eyeX = 18;
+  } else if (shape === 'spiky') { // 星
+    const n = 5 + Math.floor(r() * 3);
     for (let i = 0; i <= n * 2; i++) {
-      const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
-      const rr = i % 2 ? 0.72 : 1;
-      g.lineTo(cx + Math.cos(a) * rx * rr, cy + Math.sin(a) * ry * rr);
+      const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2, rr = i % 2 ? 58 : 135;
+      g.lineTo(150 + Math.cos(a) * rr, 160 + Math.sin(a) * rr);
     }
-  } else if (shape === 3) { // しずく
-    g.moveTo(cx, cy - ry - 20);
-    g.bezierCurveTo(cx + rx * 1.1, cy - 20, cx + rx, cy + ry, cx, cy + ry);
-    g.bezierCurveTo(cx - rx, cy + ry, cx - rx * 1.1, cy - 20, cx, cy - ry - 20);
-  } else g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-  g.closePath();
-  const grad = g.createRadialGradient(cx - rx * 0.35, cy - ry * 0.4, 10, cx, cy, Math.max(rx, ry) * 1.1);
-  grad.addColorStop(0, hsl(h, s, Math.min(0.92, l + 0.25)));
-  grad.addColorStop(0.6, hsl(h, s, l));
-  grad.addColorStop(1, hsl((h + 15) % 360, s, l * 0.6));
-  g.fillStyle = grad; g.fill();
-  g.lineWidth = 6; g.strokeStyle = hsl(h, s, l * 0.45); g.stroke();
-  // 模様
-  for (let i = 0; i < 4 + r() * 5; i++) {
-    g.beginPath();
-    g.arc(cx + (r() - 0.5) * rx * 1.2, cy + (r() - 0.1) * ry * 0.8, 6 + r() * 10, 0, Math.PI * 2);
-    g.fillStyle = hsl((h + 180 * r()) % 360, s * 0.6, Math.min(0.9, l + 0.2)); g.globalAlpha = 0.5; g.fill(); g.globalAlpha = 1;
+    g.closePath(); fillGrad(g, main, light, dark); g.stroke(); eyeY = 160; eyeX = 24;
+  } else if (shape === 'big') { // 箱
+    g.roundRect(30, 60, 240, 210, 18); fillGrad(g, main, light, dark); g.stroke();
+    g.beginPath(); g.moveTo(30, 110); g.lineTo(270, 110); g.stroke();
+    g.fillStyle = light; g.globalAlpha = 0.6; g.fillRect(135, 60, 30, 210); g.globalAlpha = 1; eyeY = 180;
+  } else { // しずく
+    g.moveTo(150, 20); g.bezierCurveTo(250, 140, 260, 280, 150, 280); g.bezierCurveTo(40, 280, 50, 140, 150, 20);
+    g.closePath(); fillGrad(g, main, light, dark); g.stroke(); eyeY = 190;
   }
-  // 目
-  const ey = cy - ry * 0.15, ex = rx * 0.32, er = 16 + r() * 6;
+  // 小さな目（モノに宿った気配）
   for (const sx of [-1, 1]) {
-    g.beginPath(); g.ellipse(cx + sx * ex, ey, er * 0.8, er, 0, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
-    g.lineWidth = 3; g.strokeStyle = '#222'; g.stroke();
-    g.beginPath(); g.arc(cx + sx * ex + 3, ey + 3, er * 0.45, 0, Math.PI * 2); g.fillStyle = '#1b1b25'; g.fill();
-    g.beginPath(); g.arc(cx + sx * ex + 6, ey - 2, er * 0.15, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
+    g.beginPath(); g.ellipse(150 + sx * eyeX, eyeY, 7, 10, 0, 0, Math.PI * 2); g.fillStyle = color === 'black' ? '#fff' : '#1b1b25'; g.fill();
   }
-  // 口
-  g.beginPath(); g.arc(cx, ey + er + 10, 12, 0.15 * Math.PI, 0.85 * Math.PI); g.lineWidth = 4; g.strokeStyle = '#222'; g.stroke();
-  // 余白を詰める
-  const out = document.createElement('canvas'); out.width = 240; out.height = 260;
-  out.getContext('2d').drawImage(c, 30, 20, 240, 260, 0, 0, 240, 260);
-  return out;
+  return c;
+}
+function fillGrad(g, main, light, dark) {
+  const gr = g.createLinearGradient(40, 20, 260, 290);
+  gr.addColorStop(0, light); gr.addColorStop(0.5, main); gr.addColorStop(1, dark);
+  g.fillStyle = gr; g.fill();
 }
 
-export function makeDrawnMonster(el, seed, name) {
-  const c = drawMonster(el, seed);
-  const m = makeCreature(c, 0.18 + (seed % 30) / 100, canvasToDataUrl(c), { element: el });
+export function makeDrawnUnit(color, shape, seed, name) {
+  const c = drawObject(color, shape, seed);
+  const hue = HUE_OF[color] != null ? (HUE_OF[color] + Math.round((rng(seed)() - 0.5) * 20) + 360) % 360 : null;
+  const m = makeCreature(c, 0.15 + (seed % 30) / 100, canvasToDataUrl(c), { color, hue, shape });
   if (name) m.name = name;
   m.drawn = true;
   return m;
@@ -72,20 +69,21 @@ export function makeDrawnMonster(el, seed, name) {
 
 export function makeStarters() {
   return [
-    makeDrawnMonster('fire', 11, 'ポッカ'),
-    makeDrawnMonster('water', 23, 'シズモ'),
-    makeDrawnMonster('leaf', 37, 'モリィ'),
+    makeDrawnUnit('red', 'round', 11, 'アカまる'),
+    makeDrawnUnit('blue', 'long', 23, 'ソラぼう'),
+    makeDrawnUnit('yellow', 'spiky', 37, 'コガネつの'),
   ];
 }
 
 export function makeCpuTeam(seed) {
   const r = rng(seed);
-  const els = ['fire', 'water', 'leaf', 'bolt', 'light', 'dark'];
+  const colors = ['red', 'yellow', 'green', 'blue', 'purple', 'white', 'black'];
+  const shapes = ['round', 'spiky', 'long', 'big', 'plain'];
   const team = [];
   while (team.length < 3) {
-    const el = els[Math.floor(r() * els.length)];
-    if (team.some((m) => m.element === el)) continue;
-    team.push(makeDrawnMonster(el, Math.floor(r() * 1e9)));
+    const color = colors[Math.floor(r() * colors.length)];
+    if (team.some((m) => m.color === color)) continue;
+    team.push(makeDrawnUnit(color, shapes[Math.floor(r() * shapes.length)], Math.floor(r() * 1e9)));
   }
   return team;
 }

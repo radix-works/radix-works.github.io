@@ -1,97 +1,64 @@
-// ゲームの基本データ（属性・わざ・とくせい）
+// ゲームの基本データ（色・かたち・スキル）
 
-export const ELEMENTS = {
-  fire:  { name: '火', label: 'ほのお', color: '#ff6a3d', dark: '#b8321a' },
-  water: { name: '水', label: 'みず',   color: '#3d9bff', dark: '#1a5bb8' },
-  leaf:  { name: '草', label: 'くさ',   color: '#3fcf6b', dark: '#1d8a3f' },
-  bolt:  { name: '雷', label: 'いかずち', color: '#ffc928', dark: '#b88a00' },
-  light: { name: '光', label: 'ひかり', color: '#f3a8ff', dark: '#a352c4' },
-  dark:  { name: '闇', label: 'やみ',   color: '#7b6cff', dark: '#3b2fa8' },
+// 写真の主な色。hue（色相の角度）で相性が決まる。白・黒は相性なし
+export const COLORS = {
+  red:    { name: '赤', color: '#ff5a4e' },
+  yellow: { name: '黄', color: '#ffc928' },
+  green:  { name: '緑', color: '#3fcf6b' },
+  blue:   { name: '青', color: '#3d9bff' },
+  purple: { name: '紫', color: '#b46cff' },
+  white:  { name: '白', color: '#e9ecf5' },
+  black:  { name: '黒', color: '#4a4f66' },
 };
-export const ELEMENT_KEYS = Object.keys(ELEMENTS);
 
-// 相性表 [攻撃側][防御側] = 倍率（書いていない組み合わせは 1 倍）
-const CHART = {
-  fire:  { leaf: 2, water: 0.5, fire: 0.5 },
-  water: { fire: 2, leaf: 0.5, water: 0.5 },
-  leaf:  { water: 2, bolt: 2, fire: 0.5, leaf: 0.5 },
-  bolt:  { water: 2, leaf: 0.5, bolt: 0.5 },
-  light: { dark: 2, light: 0.5 },
-  dark:  { light: 2, dark: 0.5 },
-};
-export function typeMult(atkEl, defEl) {
-  if (!atkEl) return 1;
-  return (CHART[atkEl] && CHART[atkEl][defEl]) || 1;
+// 色相の相性：自分の色から時計回りに 90〜150度先の色に強い（1.3倍）、逆に 210〜270度先の色には弱い（0.8倍）
+export function hueAdv(atkHue, defHue) {
+  if (atkHue == null || defHue == null) return 0;
+  const d = (((defHue - atkHue) % 360) + 360) % 360;
+  if (d >= 90 && d <= 150) return 1;
+  if (d >= 210 && d <= 270) return -1;
+  return 0;
 }
+export const ADV_MULT = { 1: 1.3, 0: 1, '-1': 0.8 };
 
-// わざ
-// kind: atk(攻撃) / heal(回復) / buff(自分の能力アップ) / debuff(相手の能力ダウン)
-export const MOVES = {
-  // 火
-  hinoko:      { name: 'ひのこ', el: 'fire', kind: 'atk', pow: 55, acc: 100, pp: 12, burn: 0.2 },
-  flametackle: { name: 'フレイムタックル', el: 'fire', kind: 'atk', pow: 80, acc: 95, pp: 8 },
-  bakuen:      { name: 'ばくえん', el: 'fire', kind: 'atk', pow: 115, acc: 80, pp: 4, burn: 0.3 },
-  netsuryo:    { name: 'ねつりょうチャージ', el: 'fire', kind: 'buff', stat: 'atk', stages: 2, pp: 4 },
-  // 水
-  mizudeppo:   { name: 'みずでっぽう', el: 'water', kind: 'atk', pow: 55, acc: 100, pp: 12 },
-  aquaslash:   { name: 'アクアスラッシュ', el: 'water', kind: 'atk', pow: 80, acc: 95, pp: 8, crit: 0.12 },
-  daikozui:    { name: 'だいこうずい', el: 'water', kind: 'atk', pow: 115, acc: 80, pp: 4 },
-  shizuku:     { name: 'いやしのしずく', el: 'water', kind: 'heal', ratio: 0.45, pp: 3 },
-  // 草
-  happa:       { name: 'はっぱカッター', el: 'leaf', kind: 'atk', pow: 55, acc: 100, pp: 12, crit: 0.2 },
-  tsuru:       { name: 'つるのムチ', el: 'leaf', kind: 'atk', pow: 80, acc: 95, pp: 8 },
-  solar:       { name: 'ソーラーブラスト', el: 'leaf', kind: 'atk', pow: 115, acc: 80, pp: 4 },
-  drain:       { name: 'ドレインリーフ', el: 'leaf', kind: 'atk', pow: 65, acc: 100, pp: 6, drain: 0.5 },
-  // 雷
-  dengeki:     { name: 'でんげき', el: 'bolt', kind: 'atk', pow: 55, acc: 100, pp: 12, para: 0.2 },
-  inazuma:     { name: 'いなずまキック', el: 'bolt', kind: 'atk', pow: 80, acc: 95, pp: 8 },
-  kaminari:    { name: 'かみなりおとし', el: 'bolt', kind: 'atk', pow: 115, acc: 75, pp: 4, para: 0.3 },
-  denko:       { name: 'でんこうせっか', el: 'bolt', kind: 'atk', pow: 45, acc: 100, pp: 8, prio: 1 },
-  // 光
-  hikari:      { name: 'ひかりのつぶ', el: 'light', kind: 'atk', pow: 55, acc: 100, pp: 12 },
-  prism:       { name: 'プリズムレイ', el: 'light', kind: 'atk', pow: 80, acc: 95, pp: 8 },
-  judge:       { name: 'ジャッジメント', el: 'light', kind: 'atk', pow: 115, acc: 80, pp: 4 },
-  barrier:     { name: 'ひかりのバリア', el: 'light', kind: 'buff', stat: 'def', stages: 2, pp: 4 },
-  // 闇
-  kageuchi:    { name: 'かげうち', el: 'dark', kind: 'atk', pow: 45, acc: 100, pp: 8, prio: 1 },
-  nightclaw:   { name: 'ナイトクロー', el: 'dark', kind: 'atk', pow: 80, acc: 95, pp: 8, crit: 0.15 },
-  blackhole:   { name: 'ブラックホール', el: 'dark', kind: 'atk', pow: 115, acc: 80, pp: 4 },
-  noroi:       { name: 'のろい', el: 'dark', kind: 'debuff', stat: 'atk', stages: -2, pp: 4 },
-  // 無属性
-  taiatari:    { name: 'たいあたり', el: null, kind: 'atk', pow: 65, acc: 100, pp: 15 },
-  kiai:        { name: 'きあいだめ', el: null, kind: 'buff', stat: 'atk', stages: 2, pp: 4 },
-  teppeki:     { name: 'てっぺき', el: null, kind: 'buff', stat: 'def', stages: 2, pp: 4 },
-  kosoku:      { name: 'こうそくいどう', el: null, kind: 'buff', stat: 'spd', stages: 2, pp: 4 },
-  saisei:      { name: 'じこさいせい', el: null, kind: 'heal', ratio: 0.45, pp: 3 },
-  niramu:      { name: 'にらみつける', el: null, kind: 'debuff', stat: 'def', stages: -2, pp: 4 },
+// 写真の形
+export const SHAPES = {
+  round:  { name: 'まる', desc: 'ガードが高め' },
+  spiky:  { name: 'とがり', desc: 'パワーが高め' },
+  long:   { name: 'ほそなが', desc: 'スピードが高め' },
+  big:    { name: 'おおきい', desc: '体力が高め' },
+  plain:  { name: 'シンプル', desc: 'バランス型' },
 };
 
-// 属性ごとのわざの候補
-export const MOVE_POOL = {
-  fire:  { weak: ['hinoko'], mid: ['flametackle'], big: ['bakuen'], sup: ['netsuryo'] },
-  water: { weak: ['mizudeppo'], mid: ['aquaslash'], big: ['daikozui'], sup: ['shizuku'] },
-  leaf:  { weak: ['happa'], mid: ['tsuru', 'drain'], big: ['solar'], sup: ['drain'] },
-  bolt:  { weak: ['dengeki', 'denko'], mid: ['inazuma'], big: ['kaminari'], sup: ['denko'] },
-  light: { weak: ['hikari'], mid: ['prism'], big: ['judge'], sup: ['barrier'] },
-  dark:  { weak: ['kageuchi'], mid: ['nightclaw'], big: ['blackhole'], sup: ['noroi'] },
+// スキル
+// target: enemy(相手1体) / ally(味方1体) / self / allEnemies / allAllies
+// first: true のものはターンの最初に発動する
+export const SKILLS = {
+  attack:   { name: 'こうげき', cost: 0, target: 'enemy', power: 1.0, desc: 'ふつうの攻撃' },
+  guard:    { name: 'ガード', cost: 0, target: 'self', first: true, desc: 'このターン受けるダメージ半分・⚡+1' },
+  // かたちのスキル
+  cover:    { name: 'たてになる', cost: 2, target: 'ally', first: true, desc: '味方1体への攻撃を代わりに受ける（ダメージ3割減）' },
+  pierce:   { name: 'つらぬく', cost: 3, target: 'enemy', power: 1.7, pierce: true, desc: '威力1.7倍・ガードとバリアを無視' },
+  rush:     { name: 'れんだ', cost: 3, target: 'enemy', power: 0.6, hits: 3, desc: '威力0.6倍で3回攻撃' },
+  sweep:    { name: 'なぎはらう', cost: 4, target: 'allEnemies', power: 0.75, desc: '相手全員に威力0.75倍' },
+  charge:   { name: 'ためる', cost: 2, target: 'self', desc: '次の攻撃の威力が2倍' },
+  // 色のスキル
+  swing:    { name: 'フルスイング', cost: 3, target: 'enemy', power: 1.6, desc: '威力1.6倍' },
+  flash:    { name: 'フラッシュ', cost: 4, target: 'allEnemies', dazzle: true, desc: '相手全員の次の行動を4割で失敗させる' },
+  mend:     { name: 'つくろう', cost: 3, target: 'ally', heal: 0.4, desc: '味方1体の体力を4割回復' },
+  chill:    { name: 'ひやす', cost: 3, target: 'enemy', power: 1.0, slow: true, desc: '攻撃＋2ターンの間スピード3割減' },
+  absorb:   { name: 'すいとる', cost: 3, target: 'enemy', power: 1.1, drain: 0.5, desc: '与えたダメージの半分を回復' },
+  barrier:  { name: 'バリア', cost: 4, target: 'allAllies', first: true, desc: 'このターン味方全員のダメージ4割減' },
+  ambush:   { name: 'ふいうち', cost: 3, target: 'enemy', power: 1.0, ambush: true, desc: 'まだ動いていない相手には威力2倍' },
 };
+export const SHAPE_SKILL = { round: 'cover', spiky: 'pierce', long: 'rush', big: 'sweep', plain: 'charge' };
+export const COLOR_SKILL = { red: 'swing', yellow: 'flash', green: 'mend', blue: 'chill', purple: 'absorb', white: 'barrier', black: 'ambush' };
 
-// とくせい（写真の形や色から決まる）
-export const ABILITIES = {
-  marui:    { name: 'まんまるボディ', desc: '受けるダメージが 15% へる' },
-  togatta:  { name: 'とがったフォルム', desc: '急所に当たりやすい' },
-  nobi:     { name: 'のっぽ', desc: 'すばやさが 1 段階上がった状態で登場する' },
-  ookii:    { name: 'ビッグサイズ', desc: '最大HPが 12% 多い' },
-  colorful: { name: 'カラフル', desc: '弱点を突かれても 1.5 倍で済む' },
-  kirakira: { name: 'キラキラ', desc: '毎ターン HP が少し回復する' },
-  kagemono: { name: 'いあつかん', desc: '登場したとき相手のこうげきを 1 段階下げる' },
-  shinpuru: { name: 'シンプル', desc: '同じ属性のわざの威力が さらに 10% 上がる' },
-};
-
-export const STAT_LABELS = { hp: 'HP', atk: 'こうげき', def: 'ぼうぎょ', spd: 'すばやさ' };
+export const STAT_LABELS = { hp: '体力', pow: 'パワー', grd: 'ガード', spd: 'スピード' };
 export const RARITY = {
-  N:  { label: 'N',  stars: 1, total: 300 },
-  R:  { label: 'R',  stars: 2, total: 312 },
-  SR: { label: 'SR', stars: 3, total: 324 },
-  UR: { label: 'UR', stars: 4, total: 336 },
+  N:  { stars: 1, total: 300 },
+  R:  { stars: 2, total: 312 },
+  SR: { stars: 3, total: 324 },
+  UR: { stars: 4, total: 336 },
 };
+export const ENERGY = { start: 3, perTurn: 2, max: 10 };

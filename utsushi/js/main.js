@@ -1,5 +1,5 @@
-import { ELEMENTS, MOVES, ABILITIES, STAT_LABELS, RARITY, typeMult } from './data.js';
-import { createBattle, resolveTurn, legalActions, isLegal, cpuChoose, activeOf } from './battle.js';
+import { COLORS, SHAPES, SKILLS, STAT_LABELS, RARITY, ENERGY, hueAdv } from './data.js';
+import { createBattle, resolveTurn, cmdsValid, cmdsCost, cpuCommands, aliveIdx, needsTarget, skillsOf, maxHpOf, MAX_TURNS } from './battle.js';
 import { makeCreature } from './creature.js';
 import { fileToCanvas, cutout, loadSegmenter, canvasToDataUrl } from './cutout.js';
 import { makeStarters, makeCpuTeam } from './starters.js';
@@ -8,19 +8,36 @@ import { Link } from './net.js';
 const $ = (s) => document.querySelector(s);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clone = (o) => JSON.parse(JSON.stringify(o));
 
 // ===== 保存 =====
 const store = {
   get(k, d) { try { const v = localStorage.getItem('utsushi.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem('utsushi.' + k, JSON.stringify(v)); return true; } catch { toast('保存できませんでした（容量がいっぱいかもしれません）'); return false; } },
 };
-let mons = store.get('mons', null);
-if (!mons) { mons = makeStarters(); store.set('mons', mons); store.set('team', mons.map((m) => m.id)); }
-let team = store.get('team', []).filter((id) => mons.some((m) => m.id === id));
-const saveMons = () => store.set('mons', mons);
+let units = [];
+let team = [];
+const saveUnits = () => store.set('mons', units);
 const saveTeam = () => store.set('team', team);
-const monById = (id) => mons.find((m) => m.id === id);
-const teamMons = () => team.map(monById).filter(Boolean);
+const unitById = (id) => units.find((m) => m.id === id);
+const teamUnits = () => team.map(unitById).filter(Boolean);
+
+// 古い版のデータ（色や形がない）は、保存してある画像から能力を決め直す
+async function migrate(list) {
+  const out = [];
+  for (const m of list) {
+    if (m.color && m.shape && m.stats && m.stats.pow) { out.push(m); continue; }
+    if (m.drawn || !m.img) continue;
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = m.img; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      const n = makeCreature(c, 0.3, m.img);
+      out.push({ ...n, id: m.id, created: m.created || Date.now() });
+    } catch { /* 読めない画像は捨てる */ }
+  }
+  return out;
+}
 
 // ===== 画面切り替え =====
 let current = 'home';
@@ -49,56 +66,53 @@ function modal(html, { close = true } = {}) {
 function closeModal() { $('#modal').hidden = true; $('#modal-body').innerHTML = ''; }
 
 // ===== カード表示 =====
-const elStyle = (el) => `--elc:${ELEMENTS[el].color}`;
-const badge = (el) => `<span class="el-badge" style="${elStyle(el)}">${ELEMENTS[el].name}</span>`;
+const ucol = (m) => (m.hue != null ? `hsl(${m.hue} 80% 58%)` : COLORS[m.color].color);
+const uStyle = (m) => `--uc:${ucol(m)}`;
 const stars = (r) => '★'.repeat(RARITY[r].stars);
-function moveDesc(mv) {
-  if (mv.kind === 'atk') {
-    let s = `威力${mv.pow}`;
-    if (mv.acc < 100) s += `・命中${mv.acc}`;
-    if (mv.prio) s += '・先制';
-    if (mv.drain) s += '・HP吸収';
-    if (mv.burn) s += '・やけど';
-    if (mv.para) s += '・しびれ';
-    if (mv.crit) s += '・急所';
-    return s;
-  }
-  if (mv.kind === 'heal') return 'HP回復';
-  if (mv.kind === 'buff') return `${STAT_LABELS[mv.stat]}↑↑`;
-  return `相手の${STAT_LABELS[mv.stat]}↓↓`;
+const colorChip = (m) => `<span class="c-chip" style="${uStyle(m)}"><i></i>${COLORS[m.color].name}</span>`;
+function wheel(m, size = 54) {
+  const marker = m.hue != null
+    ? `<i class="w-mark" style="transform:rotate(${m.hue}deg)"></i>`
+    : '';
+  return `<span class="wheel ${m.hue == null ? 'mono' : ''}" style="width:${size}px;height:${size}px">${marker}<b>${m.hue == null ? '無' : ''}</b></span>`;
+}
+function skillRow(key) {
+  const sk = SKILLS[key];
+  return `<div class="skill-row"><b>${sk.name}</b><span class="cost">⚡${sk.cost}</span><small>${sk.desc}</small></div>`;
 }
 function cardHTML(m, { edit = false } = {}) {
-  const ab = ABILITIES[m.ability];
-  return `<div class="card r-${m.rarity}" style="${elStyle(m.element)}">
-    <div class="card-head">${badge(m.element)}<span class="card-name">${esc(m.name)}</span><span class="rarity">${stars(m.rarity)} ${m.rarity}</span></div>
+  const sks = skillsOf(m);
+  return `<div class="card r-${m.rarity}" style="${uStyle(m)}">
+    <div class="card-head">${colorChip(m)}<span class="card-name">${esc(m.name)}</span><span class="rarity">${stars(m.rarity)} ${m.rarity}</span></div>
     <div class="card-art"><img class="sticker" src="${m.img}" alt=""></div>
-    <div class="stats">${Object.keys(STAT_LABELS).map((k) => `<div class="stat"><span>${STAT_LABELS[k]}</span><b>${m.stats[k]}</b><div class="bar-bg"><div class="bar-fg" style="width:${Math.min(100, (m.stats[k] / 140) * 100)}%"></div></div></div>`).join('')}</div>
-    <div class="ability"><b>とくせい：${ab.name}</b><br>${ab.desc}</div>
-    <div class="moves">${m.moves.map((k) => { const mv = MOVES[k]; return `<div class="move-chip" style="--mc:${mv.el ? ELEMENTS[mv.el].color : '#aab'}"><span class="el-dot"></span><b>${mv.name}</b><span>${moveDesc(mv)}</span></div>`; }).join('')}</div>
-    ${edit ? `<div class="name-edit"><input id="in-rename" maxlength="10" value="${esc(m.name)}" aria-label="名前"><button class="btn btn-sub" id="btn-rename" style="width:auto">名前を変える</button></div>` : ''}
+    <div class="card-meta">${wheel(m)}<div><div class="meta-l">かたち：<b>${SHAPES[m.shape].name}</b>（${SHAPES[m.shape].desc}）</div><div class="meta-l">色：<b>${COLORS[m.color].name}</b>${m.hue != null ? `（色相 ${m.hue}°）` : '（相性なし）'}</div></div></div>
+    <div class="stats">${Object.keys(STAT_LABELS).map((k) => `<div class="stat"><span>${STAT_LABELS[k]}</span><b>${k === 'hp' ? maxHpOf(m) : m.stats[k]}</b><div class="bar-bg"><div class="bar-fg" style="width:${Math.min(100, (m.stats[k] / 140) * 100)}%"></div></div></div>`).join('')}</div>
+    <div class="skills"><div class="sk-h">スキル</div>${skillRow(sks[1])}${skillRow(sks[2])}</div>
+    ${edit ? `<div class="name-edit"><input id="in-rename" maxlength="10" value="${esc(m.name)}" aria-label="名前"><button class="btn btn-sub" id="btn-rename">名前を変える</button></div>` : ''}
   </div>`;
 }
-function miniHTML(m, extra = '') {
-  return `<div class="mini" data-id="${m.id}" style="${elStyle(m.element)}">${badge(m.element)}<span class="rar">${m.rarity}</span><img class="sticker" src="${m.img}" alt="" loading="lazy"><span class="mn">${esc(m.name)}</span>${extra}</div>`;
+function miniHTML(m, extra = '', cls = '') {
+  return `<div class="mini ${cls}" data-id="${m.id}" style="${uStyle(m)}"><span class="rar">${m.rarity}</span><img class="sticker" src="${m.img}" alt="" loading="lazy"><span class="mn">${esc(m.name)}</span>${extra}</div>`;
 }
 
 // ===== ホーム =====
 onShow.home = () => {
-  $('#home-team').innerHTML = teamMons().map((m) => `<img class="sticker" src="${m.img}" alt="">`).join('');
+  $('#home-team').innerHTML = teamUnits().map((m) => `<img class="sticker" src="${m.img}" alt="">`).join('');
 };
 $('#btn-howto').onclick = () => {
-  const rows = [['火', '草', '水'], ['水', '火', '草・雷'], ['草', '水・雷', '火'], ['雷', '水', '草'], ['光', '闇', '闇'], ['闇', '光', '光']];
   modal(`<div class="sheet"><h3>あそびかた</h3>
-    <ol><li>身のまわりの物を撮って、切り抜きたい物をタップ</li><li>色・形・大きさから、属性・ステータス・わざ・とくせいが自動で決まる</li><li>3体でチームを組んで、CPUや友だちとバトル！</li></ol>
-    <h3>属性の相性</h3>
-    <table class="chart"><tr><td></td><td><b>強い相手</b>（2倍）</td><td><b>苦手な相手</b></td></tr>${rows.map(([a, b, c]) => `<tr><td><b>${a}</b></td><td>${b}</td><td>${c}</td></tr>`).join('')}</table>
-    <p>赤・オレンジ→火 ／ 青→水 ／ 緑→草 ／ 黄色→雷 ／ 白・ピンク→光 ／ 黒・紫→闇<br>同じ属性のわざは威力1.5倍。まるい物は硬く、細長い物は速く、トゲトゲした物は急所に当てやすい…など、形も能力に影響します。</p>
+    <ol><li>身のまわりのモノを撮って、切り抜きたいモノをタップ</li><li>モノに「ウツシ」が宿る。色と形から、能力とスキルが自動で決まる</li><li>3体でチームを組んで、CPUや友だちとバトル！</li></ol>
+    <h3>バトルのながれ</h3>
+    <ol><li>3体それぞれに「こうげき・スキル・ガード」を指示</li><li>全員の指示が終わったら「ターン開始」</li><li>敵味方6体が <b>スピードの速い順</b> に行動</li></ol>
+    <p>スキルは チームで共有の <b>⚡エネルギー</b> を使います。毎ターン ⚡+${ENERGY.perTurn}（最大${ENERGY.max}）。ガードすると ⚡+1。</p>
+    <h3>色の相性（色相環）</h3>
+    <div class="howto-wheel"><span class="wheel big"></span><div><p>写真の色の「角度」で相性が決まります。<br><b>自分の色から時計回りに 約120° 先の色に強い</b>（1.3倍）、反対に 約240° 先の色には弱い（0.8倍）。<br>例：赤 → 緑に強い／緑 → 青に強い／青 → 赤紫に強い<br>白・黒のモノは相性なし。</p></div></div>
     <button class="btn btn-sub" id="m-close">とじる</button></div>`);
   $('#m-close').onclick = closeModal;
 };
 
 // ===== つくる =====
-let photo = null; // 元の写真キャンバス
+let photo = null;
 let lastCut = null;
 function aiStatus() {
   const el = $('#ai-state');
@@ -106,9 +120,7 @@ function aiStatus() {
   loadSegmenter().then(() => { el.textContent = 'AI準備OK'; }).catch(() => { el.textContent = '簡易モード'; });
 }
 onShow.create = () => { showStep('pick'); aiStatus(); };
-function showStep(s) {
-  for (const k of ['pick', 'tap', 'reveal']) $('#step-' + k).hidden = k !== s;
-}
+function showStep(s) { for (const k of ['pick', 'tap', 'reveal']) $('#step-' + k).hidden = k !== s; }
 async function onFile(e) {
   const f = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -151,12 +163,12 @@ $('#btn-birth').onclick = async () => {
   showStep('reveal');
   const stage = $('#reveal-stage');
   $('#reveal-actions').hidden = true;
-  stage.style.cssText = elStyle(m.element);
-  stage.innerHTML = `<div class="burst"></div><div class="egg"></div>`;
-  await sleep(1750);
+  stage.style.cssText = uStyle(m);
+  stage.innerHTML = `<div class="burst"></div><div class="develop"><img src="${m.img}" alt=""></div>`;
+  await sleep(1700);
   stage.innerHTML = `<div class="burst"></div><div class="reveal-card">${cardHTML(m, { edit: true })}</div>`;
-  mons.unshift(m);
-  if (!saveMons()) { mons.shift(); return; }
+  units.unshift(m);
+  if (!saveUnits()) { units.shift(); return; }
   bindRename(m);
   $('#reveal-actions').hidden = false;
   $('#btn-toteam').onclick = () => {
@@ -170,37 +182,37 @@ function bindRename(m, after) {
   b.onclick = () => {
     const v = $('#in-rename').value.trim();
     if (!v) return;
-    m.name = v.slice(0, 10); saveMons();
+    m.name = v.slice(0, 10); saveUnits();
     document.querySelectorAll('.card-name').forEach((x) => (x.textContent = m.name));
     toast('名前を変えました'); after && after();
   };
 }
 
-// ===== ずかん =====
+// ===== コレクション =====
 onShow.collection = () => {
-  $('#col-count').textContent = `${mons.length} 体`;
-  $('#col-grid').innerHTML = mons.length ? mons.map((m) => miniHTML(m)).join('') : '<p class="empty">まだモンスターがいません</p>';
+  $('#col-count').textContent = `${units.length} 体`;
+  $('#col-grid').innerHTML = units.length ? units.map((m) => miniHTML(m)).join('') : '<p class="empty">まだウツシがいません</p>';
 };
 $('#col-grid').addEventListener('click', (e) => {
   const t = e.target.closest('.mini'); if (!t) return;
-  const m = monById(t.dataset.id);
-  const body = modal(`${cardHTML(m, { edit: true })}<div class="row2" style="width:100%;max-width:340px"><button class="btn btn-sub" id="m-del">逃がす</button><button class="btn btn-sub" id="m-close">とじる</button></div>`);
+  const m = unitById(t.dataset.id);
+  const body = modal(`${cardHTML(m, { edit: true })}<div class="row2" style="width:100%;max-width:340px"><button class="btn btn-sub" id="m-del">手放す</button><button class="btn btn-sub" id="m-close">とじる</button></div>`);
   bindRename(m, () => onShow.collection());
   body.querySelector('#m-close').onclick = closeModal;
   body.querySelector('#m-del').onclick = () => {
-    if (!confirm(`${m.name} を逃がしますか？（元に戻せません）`)) return;
-    mons = mons.filter((x) => x !== m); team = team.filter((id) => id !== m.id);
-    saveMons(); saveTeam(); closeModal(); onShow.collection();
+    if (!confirm(`${m.name} を手放しますか？（元に戻せません）`)) return;
+    units = units.filter((x) => x !== m); team = team.filter((id) => id !== m.id);
+    saveUnits(); saveTeam(); closeModal(); onShow.collection();
   };
 });
 
 // ===== チーム =====
 onShow.team = () => {
-  const tm = teamMons();
+  const tm = teamUnits();
   $('#team-slots').innerHTML = [0, 1, 2].map((i) => `<div class="slot">${tm[i] ? miniHTML(tm[i], `<span class="order">${i + 1}</span>`) : `${i + 1}体目`}</div>`).join('');
-  $('#team-grid').innerHTML = mons.map((m) => {
+  $('#team-grid').innerHTML = units.map((m) => {
     const i = team.indexOf(m.id);
-    return miniHTML(m, i >= 0 ? `<span class="order">${i + 1}</span>` : '').replace('class="mini"', `class="mini${i >= 0 ? ' sel' : ''}"`);
+    return miniHTML(m, i >= 0 ? `<span class="order">${i + 1}</span>` : '', i >= 0 ? 'sel' : '');
   }).join('');
 };
 function toggleTeam(id) {
@@ -219,26 +231,27 @@ nameInput.value = store.get('name', '');
 nameInput.onchange = () => store.set('name', nameInput.value.trim());
 const myName = () => nameInput.value.trim() || 'プレイヤー';
 onShow.lobby = () => {
-  const tm = teamMons();
+  const tm = teamUnits();
   $('#lobby-team').innerHTML = tm.length === 3 ? tm.map((m) => `<img class="sticker" src="${m.img}" alt="">`).join('') : 'チームが3体そろっていません';
   resetRoom();
 };
 function needTeam() {
-  if (teamMons().length === 3) return false;
+  if (teamUnits().length === 3) return false;
   toast('先にチームを3体そろえてね'); go('team'); return true;
 }
-const packTeam = () => teamMons().map(({ id, name, element, ability, rarity, stats, moves, img }) => ({ id, name, element, ability, rarity, stats, moves, img }));
+const packTeam = () => teamUnits().map(({ id, name, color, hue, shape, rarity, stats, img }) => ({ id, name, color, hue, shape, rarity, stats, img }));
 function sanitizeTeam(t) {
   // 相手から来たデータを最低限チェック
   if (!Array.isArray(t) || t.length !== 3) throw new Error('bad team');
   return t.map((m) => {
-    if (!ELEMENTS[m.element] || !ABILITIES[m.ability] || !RARITY[m.rarity]) throw new Error('bad mon');
-    if (!Array.isArray(m.moves) || m.moves.length !== 3 || !m.moves.every((k) => MOVES[k])) throw new Error('bad moves');
+    if (!COLORS[m.color] || !SHAPES[m.shape] || !RARITY[m.rarity]) throw new Error('bad unit');
     const st = {}; let sum = 0;
-    for (const k of ['hp', 'atk', 'def', 'spd']) { st[k] = Math.max(1, Math.min(140, Math.round(+m.stats[k] || 0))); sum += st[k]; }
+    for (const k of ['hp', 'pow', 'grd', 'spd']) { st[k] = Math.max(1, Math.min(140, Math.round(+m.stats[k] || 0))); sum += st[k]; }
     if (sum > RARITY.UR.total + 4) throw new Error('bad stats');
+    const hue = m.color === 'white' || m.color === 'black' ? null : Math.round(+m.hue) % 360;
+    if (hue !== null && !(hue >= 0)) throw new Error('bad hue');
     const img = typeof m.img === 'string' && /^data:image\/(png|webp|jpeg);base64,/.test(m.img) && m.img.length < 600000 ? m.img : '';
-    return { id: String(m.id).slice(0, 40), name: String(m.name).slice(0, 10), element: m.element, ability: m.ability, rarity: m.rarity, stats: st, moves: m.moves, img };
+    return { id: String(m.id).slice(0, 40), name: String(m.name).slice(0, 10), color: m.color, hue, shape: m.shape, rarity: m.rarity, stats: st, img };
   });
 }
 
@@ -279,38 +292,36 @@ $('#btn-join').onclick = async () => {
   catch (e) { toast(e.message || '接続できませんでした'); resetRoom(); }
 };
 
-// オンライン：ホスト(0)が計算役、ゲスト(1)は行動を送って結果を受け取る
+// オンライン：ホスト(0)が計算役、ゲスト(1)は指示を送って結果を受け取る
 function setupOnline(lk, me) {
   const myTeam = packTeam();
-  let foeTeam = null, foeName = '';
-  lk.on('open', () => lk.send({ t: 'hello', v: 1, name: myName(), team: myTeam }));
+  let foeTeam = null;
+  lk.on('open', () => lk.send({ t: 'hello', v: 2, name: myName(), team: myTeam }));
   lk.on('close', () => {
-    if (session && session.link === lk && session.state.phase !== 'end') {
-      showResult(null, '相手との接続が切れました');
-    } else if (current === 'lobby') { toast('接続が切れました'); resetRoom(); }
+    if (session && session.link === lk && session.state.phase !== 'end') showResult(null, '相手との接続が切れました');
+    else if (current === 'lobby') { toast('接続が切れました'); resetRoom(); }
   });
   lk.on('error', (e) => { if (current === 'lobby') { toast('通信エラーが発生しました'); resetRoom(); } console.warn(e); });
   lk.on('data', (d) => {
     if (!d || typeof d !== 'object') return;
     if (d.t === 'busy') { toast('その部屋はもう対戦中です'); resetRoom(); return; }
     if (d.t === 'hello') {
+      if (d.v !== 2) { toast('相手のアプリが古い版です。ページを再読み込みしてもらってね'); lk.close(); resetRoom(); return; }
       try { foeTeam = sanitizeTeam(d.team); } catch { toast('相手のデータが正しくありません'); lk.close(); return; }
-      foeName = String(d.name || '相手').slice(0, 12);
+      const foeName = String(d.name || '相手').slice(0, 12);
       if (me === 0) {
         const seed = (Math.random() * 2 ** 32) >>> 0;
         const teams = [myTeam, foeTeam];
-        lk.send({ t: 'start', seed, teams, names: [myName(), foeName] });
+        lk.send({ t: 'start', seed, names: [myName(), foeName] });
         startBattle({ mode: 'online', me, teams, names: [myName(), foeName], seed, link: lk });
       }
       return;
     }
-    if (d.t === 'start' && me === 1) {
-      // ホストのチームは hello で検査済み。自分のチームは手元のものを使う
-      const teams = [foeTeam || sanitizeTeam(d.teams[0]), myTeam];
-      startBattle({ mode: 'online', me, teams, names: [String(d.names[0]).slice(0, 12), myName()], seed: d.seed >>> 0, link: lk });
+    if (d.t === 'start' && me === 1 && foeTeam) {
+      startBattle({ mode: 'online', me, teams: [foeTeam, myTeam], names: [String(d.names[0]).slice(0, 12), myName()], seed: d.seed >>> 0, link: lk });
       return;
     }
-    session && session.link === lk && session.onData(d);
+    session && session.link === lk && onBattleData(d);
   });
 }
 
@@ -325,254 +336,302 @@ function endBattleSession() {
 
 function startBattle({ mode, me, teams, names, seed, link: lk }) {
   closeModal();
-  const { state, events } = createBattle(teams[0], teams[1], seed);
+  const state = createBattle(teams[0], teams[1], seed);
   session = {
     mode, me, teams, names, state, link: lk || null, pending: [null, null], busy: false, closed: false,
-    rematch: [false, false], timerId: 0,
-    onData: (d) => onBattleData(d),
+    rematch: [false, false], timerId: 0, cmds: [null, null, null], cursor: 0, picking: null, tags: null,
   };
   go('battle');
-  $('#mon-0').className = 'mon sticker gone'; $('#mon-1').className = 'mon sticker gone';
-  renderPlates(session.state, true);
-  playEvents(events, session.state).then(() => askAction());
+  $('#name-0').textContent = names[me]; $('#name-1').textContent = names[1 - me];
+  buildRows();
+  renderAll(state);
+  say('バトル開始！');
+  setTimeout(() => startCommand(), 500);
 }
 
 const foeSide = () => 1 - session.me;
-// 画面上：自分は spot-0 / 相手は spot-1
-const viewOf = (side) => (side === session.me ? 0 : 1);
+const rowOf = (side) => (side === session.me ? 0 : 1);
+const tileOf = (side, i) => $(`#row-${rowOf(side)} .unit[data-i="${i}"]`);
 
-function renderPlates(state, setImg) {
+function buildRows() {
   for (const side of [0, 1]) {
-    const v = viewOf(side);
-    const f = activeOf(state, side);
-    const sd = state.sides[side];
-    renderPlate(v, f, sd);
-    if (setImg) $('#mon-' + v).src = session.teams[side][sd.active].img;
+    $('#row-' + rowOf(side)).innerHTML = session.teams[side].map((m, i) => `
+      <div class="unit" data-side="${side}" data-i="${i}" style="${uStyle(m)}">
+        <div class="u-adv"></div>
+        <div class="u-img"><img class="sticker" src="${m.img}" alt=""></div>
+        <div class="u-name">${esc(m.name)}</div>
+        <div class="hp"><i></i></div>
+        <div class="u-tags"></div>
+        <div class="u-cmd"></div>
+      </div>`).join('');
   }
 }
-function renderPlate(v, f, sd) {
+
+function renderUnit(view, side, i) {
+  const f = view.sides[side].team[i];
+  const el = tileOf(side, i);
   const pct = Math.max(0, (f.hp / f.maxHp) * 100);
-  const cls = pct <= 25 ? 'low' : pct <= 50 ? 'mid' : '';
-  const boosts = Object.entries(f.boosts).filter(([, x]) => x).map(([k, x]) => `<span class="chip ${x > 0 ? 'up' : 'down'}">${STAT_LABELS[k]}${x > 0 ? '↑' : '↓'}${Math.abs(x)}</span>`).join('');
-  const st = f.status ? `<span class="chip ${f.status}">${f.status === 'burn' ? 'やけど' : 'しびれ'}</span>` : '';
-  $('#plate-' + v).innerHTML = `<div class="pn">${badge(f.el)}<span class="nm">${esc(f.name)}</span></div>
-    <div class="hp"><i class="${cls}" style="width:${pct}%"></i></div>
-    ${v === 0 ? `<div class="hp-txt">${f.hp} / ${f.maxHp}</div>` : ''}
-    <div class="row"><span class="bench">${sd.team.map((m) => `<i class="${m.hp <= 0 ? 'dead' : ''}"></i>`).join('')}</span>${st}${boosts}</div>`;
+  const bar = el.querySelector('.hp i');
+  bar.style.width = pct + '%';
+  bar.className = pct <= 25 ? 'low' : pct <= 50 ? 'mid' : '';
+  el.classList.toggle('down', f.hp <= 0);
+  const tags = [];
+  const tg = (session.tags && session.tags[side][i]) || {};
+  if (tg.guard) tags.push('<span class="tag t-guard">ガード</span>');
+  if (tg.cover) tags.push('<span class="tag t-guard">かばう</span>');
+  if (tg.barrier) tags.push('<span class="tag t-barrier">バリア</span>');
+  if (f.charged) tags.push('<span class="tag t-charge">ため</span>');
+  if (f.slowTurns > 0) tags.push('<span class="tag t-slow">スロー</span>');
+  if (f.dazzled) tags.push('<span class="tag t-dazzle">まぶしい</span>');
+  el.querySelector('.u-tags').innerHTML = tags.join('');
+  el.title = `${f.name} 体力 ${f.hp}/${f.maxHp}`;
 }
-
+function renderAll(view) {
+  for (const side of [0, 1]) for (let i = 0; i < 3; i++) renderUnit(view, side, i);
+  renderEnergy(view.sides.map((s) => s.energy));
+  $('#b-turn').textContent = `ターン ${Math.min(view.turn, MAX_TURNS)} / ${MAX_TURNS}`;
+}
+function renderEnergy(values) {
+  for (const side of [0, 1]) $('#en-' + rowOf(side)).textContent = `⚡${values[side]}`;
+}
 function say(text) { $('#msg').innerHTML = text; }
-function fxAt(v, cls, html, styles = '') {
-  const spot = $('#spot-' + v), field = $('#field');
-  const fr = field.getBoundingClientRect(), sr = spot.getBoundingClientRect();
-  const el = document.createElement('div');
-  el.className = 'fx ' + cls; el.innerHTML = html;
-  el.style.cssText = `left:${sr.left - fr.left + sr.width / 2}px;top:${sr.top - fr.top + sr.height * 0.45}px;${styles}`;
-  field.appendChild(el);
-  setTimeout(() => el.remove(), 1200);
-}
-function anim(v, cls) {
-  const m = $('#mon-' + v);
-  m.classList.remove('enter', 'out', 'lunge-me', 'lunge-foe', 'hit', 'power', 'faint');
-  void m.offsetWidth; m.classList.add(cls);
-}
-const who = (side) => (side === session.me ? '' : '相手の ');
 
-// 計算結果（イベント）を順番に演出する。表示用の状態はイベントに合わせて少しずつ進める
-async function playEvents(events, finalState) {
-  session.busy = true;
-  $('#cmd').innerHTML = '';
-  // 表示用：最終状態のコピーに対し、HP だけイベントで追いかける
-  const view = JSON.parse(JSON.stringify(finalState));
-  const hpShown = {};
-  for (const ev of events) {
-    if (session.closed) return;
-    const v = ev.side !== undefined ? viewOf(ev.side) : 0;
-    const sd = ev.side !== undefined ? view.sides[ev.side] : null;
-    switch (ev.t) {
-      case 'turn': $('#b-turn').textContent = `ターン ${ev.turn}`; break;
-      case 'enter': {
-        sd.active = ev.idx;
-        const f = sd.team[ev.idx];
-        const shownHp = hpShown[ev.side + ':' + ev.idx];
-        const tmp = { ...f, hp: shownHp ?? f.hp, boosts: { atk: 0, def: 0, spd: 0 }, status: f.status };
-        $('#mon-' + v).src = session.teams[ev.side][ev.idx].img;
-        anim(v, 'enter'); $('#mon-' + v).classList.remove('gone');
-        renderPlate(v, tmp, sd); say(`${who(ev.side)}${esc(ev.name)} が あらわれた！`);
-        await sleep(800); break;
-      }
-      case 'withdraw': say(`${who(ev.side)}${esc(ev.name)} は もどった`); anim(v, 'out'); await sleep(450); break;
-      case 'move': {
-        const mc = ev.el ? ELEMENTS[ev.el].color : '#5a6080';
-        const f = sd.team[sd.active];
-        say(`${who(ev.side)}${esc(f.name)} の <b>${esc(ev.name)}</b>！`);
-        const bn = $('#banner'); bn.textContent = ev.name; bn.style.setProperty('--mc', mc);
-        bn.classList.remove('show'); void bn.offsetWidth; bn.classList.add('show');
-        anim(v, ev.kind === 'atk' ? (v === 0 ? 'lunge-me' : 'lunge-foe') : 'power');
-        session.lastMc = mc;
-        await sleep(650); break;
-      }
-      case 'skip': say(`${who(ev.side)}${esc(sd.team[sd.active].name)} は ${ev.reason}`); await sleep(900); break;
-      case 'miss': say('しかし 当たらなかった！'); await sleep(800); break;
-      case 'dmg': {
-        const f = sd.team[sd.active];
-        hpShown[ev.side + ':' + sd.active] = ev.hp;
-        if (!ev.burn) fxAt(v, 'slash', '', `--mc:${session.lastMc || '#fff'}`);
-        anim(v, 'hit');
-        fxAt(v, 'dmg-num' + (ev.mult > 1 || ev.crit ? ' big' : ''), `-${ev.amount}`);
-        renderPlate(v, { ...f, hp: ev.hp }, sd);
-        const notes = [];
-        if (ev.burn) notes.push(`${who(ev.side)}${esc(f.name)} は やけどのダメージ！`);
-        if (ev.crit) notes.push('急所に当たった！');
-        if (ev.mult > 1) notes.push('こうかは ばつぐんだ！');
-        if (ev.mult < 1) notes.push('こうかは いまひとつ…');
-        if (notes.length) say(notes.join(' '));
-        await sleep(notes.length ? 950 : 650); break;
-      }
-      case 'heal': {
-        const f = sd.team[sd.active];
-        hpShown[ev.side + ':' + sd.active] = ev.hp;
-        fxAt(v, 'dmg-num heal', `+${ev.amount}`);
-        renderPlate(v, { ...f, hp: ev.hp }, sd);
-        say(`${who(ev.side)}${esc(f.name)} の HP が 回復した${ev.cause ? `（${ev.cause}）` : ''}`);
-        await sleep(800); break;
-      }
-      case 'status': {
-        const f = sd.team[sd.active];
-        say(`${who(ev.side)}${esc(f.name)} は ${ev.st === 'burn' ? 'やけどを負った！' : 'しびれてしまった！'}`);
-        await sleep(850); break;
-      }
-      case 'boost': {
-        const f = sd.team[sd.active];
-        if (!ev.delta) { say(`${who(ev.side)}${esc(f.name)} の ${STAT_LABELS[ev.stat]} は もう変わらない`); await sleep(700); break; }
-        fxAt(v, 'boost-fx', ev.delta > 0 ? '⬆️' : '⬇️');
-        say(`${ev.cause ? `【${ev.cause}】 ` : ''}${who(ev.side)}${esc(f.name)} の ${STAT_LABELS[ev.stat]} が ${ev.delta > 0 ? '上がった！' : '下がった！'}`);
-        await sleep(850); break;
-      }
-      case 'faint': anim(v, 'faint'); say(`${who(ev.side)}${esc(ev.name)} は たおれた！`); await sleep(1000); break;
-      case 'end': break;
+// ---- 指示を出す ----
+function startCommand() {
+  if (!session || session.closed || session.state.phase !== 'select') return;
+  const st = session.state;
+  session.cmds = [0, 1, 2].map(() => null);
+  session.picking = null;
+  session.cursor = aliveIdx(st.sides[session.me])[0];
+  document.querySelectorAll('.u-cmd').forEach((x) => (x.textContent = ''));
+  startTimer();
+  drawPanel();
+}
+const myEnergyLeft = () => session.state.sides[session.me].energy - cmdsCost(session.cmds);
+
+function drawPanel() {
+  const st = session.state, me = session.me;
+  const mySide = st.sides[me];
+  clearTargeting();
+  // 指示の表示
+  for (let i = 0; i < 3; i++) {
+    const t = tileOf(me, i);
+    const c = session.cmds[i];
+    t.querySelector('.u-cmd').textContent = c ? SKILLS[c.skill].name + (c.target != null && needsTarget(c.skill) ? ` → ${st.sides[SKILLS[c.skill].target === 'enemy' ? 1 - me : me].team[c.target].name}` : '') : '';
+    t.classList.toggle('cursor', i === session.cursor && !session.done);
+  }
+  const panel = $('#panel');
+  const left = myEnergyLeft();
+  const energyBar = `<div class="en-bar"><span>⚡ エネルギー</span><div class="en-dots">${Array.from({ length: ENERGY.max }, (_, k) => `<i class="${k < left ? 'on' : k < mySide.energy ? 'used' : ''}"></i>`).join('')}</div><b>${left}</b></div>`;
+  const alive = aliveIdx(mySide);
+  const allSet = alive.every((i) => session.cmds[i]);
+  if (session.cursor == null || allSet && session.cursor === -1) {
+    say('指示がそろいました');
+    panel.innerHTML = energyBar + `<p class="p-hint">変えたいウツシをタップすると、指示をやり直せます</p><button class="btn btn-hero" id="b-go">ターン開始！</button>`;
+    $('#b-go').onclick = () => submit(session.cmds.slice());
+    return;
+  }
+  const i = session.cursor;
+  const f = mySide.team[i];
+  say(`<b>${esc(f.name)}</b> への指示（${alive.indexOf(i) + 1} / ${alive.length}）`);
+  panel.innerHTML = energyBar + `<div class="sk-grid">${f.skills.map((key) => {
+    const sk = SKILLS[key];
+    const ok = sk.cost <= left + (session.cmds[i] ? SKILLS[session.cmds[i].skill].cost : 0);
+    return `<button class="sk-btn ${key === 'attack' ? 'main' : key === 'guard' ? 'guard' : 'skill'}" data-sk="${key}" ${ok ? '' : 'disabled'}><span class="sk-n">${sk.name}</span>${sk.cost ? `<span class="sk-c">⚡${sk.cost}</span>` : ''}<span class="sk-d">${sk.desc}</span></button>`;
+  }).join('')}</div>`;
+  panel.querySelectorAll('[data-sk]').forEach((b) => (b.onclick = () => chooseSkill(i, b.dataset.sk)));
+}
+
+function chooseSkill(i, key) {
+  const sk = SKILLS[key];
+  if (!needsTarget(key)) { setCmd(i, { skill: key, target: null }); return; }
+  const st = session.state, me = session.me;
+  const tSide = sk.target === 'enemy' ? 1 - me : me;
+  const f = st.sides[me].team[i];
+  session.picking = { i, key };
+  say(sk.target === 'enemy' ? `<b>${sk.name}</b>：ねらう相手をタップ` : `<b>${sk.name}</b>：味方をタップ`);
+  $('#panel').innerHTML = `<button class="btn btn-sub" id="b-cancel">もどる</button>`;
+  $('#b-cancel').onclick = () => { session.picking = null; drawPanel(); };
+  for (const t of aliveIdx(st.sides[tSide])) {
+    if (key === 'cover' && t === i) continue;
+    const el = tileOf(tSide, t);
+    el.classList.add('target');
+    if (sk.target === 'enemy') {
+      const adv = hueAdv(f.hue, st.sides[tSide].team[t].hue);
+      el.querySelector('.u-adv').innerHTML = adv > 0 ? '<span class="adv good">相性◎</span>' : adv < 0 ? '<span class="adv bad">相性△</span>' : '';
     }
   }
-  renderPlates(finalState, false);
-  session.busy = false;
-  if (finalState.phase === 'end') showResult(finalState.winner);
 }
-
-function askAction() {
-  if (!session || session.closed || session.busy) return;
-  const st = session.state;
-  if (st.phase === 'end') return;
-  const me = session.me;
-  const acts = legalActions(st, me);
-  if (!acts.length) { // 自分は交代不要（相手だけ交代中）
-    $('#cmd').innerHTML = '<p class="wait-msg dots">相手が交代を選んでいます</p>';
-    say('相手が 次のモンスターを えらんでいます');
-    submit(null); return;
+function clearTargeting() {
+  document.querySelectorAll('.unit.target').forEach((x) => x.classList.remove('target'));
+  document.querySelectorAll('.u-adv').forEach((x) => (x.innerHTML = ''));
+}
+function setCmd(i, cmd) {
+  session.cmds[i] = cmd;
+  session.picking = null;
+  const alive = aliveIdx(session.state.sides[session.me]);
+  const next = alive.find((k) => !session.cmds[k]);
+  session.cursor = next == null ? -1 : next;
+  drawPanel();
+}
+$('#table').addEventListener('click', (e) => {
+  if (!session || session.busy || session.submitted) return;
+  const t = e.target.closest('.unit'); if (!t) return;
+  const side = +t.dataset.side, i = +t.dataset.i;
+  if (session.picking) {
+    if (!t.classList.contains('target')) return;
+    setCmd(session.picking.i, { skill: session.picking.key, target: i });
+    return;
   }
-  if (st.phase === 'replace') { showSwitchMenu(true); return; }
-  showMoveMenu();
-}
-
-function showMoveMenu() {
-  const st = session.state, me = session.me;
-  const f = activeOf(st, me), foe = activeOf(st, foeSide());
-  say(`${esc(f.name)} は どうする？`);
-  const movesHtml = f.moves.map((m, i) => {
-    const mv = MOVES[m.key];
-    const mult = mv.kind === 'atk' ? typeMult(mv.el, foe.el) : 1;
-    const eff = mult > 1 ? '<span class="eff">ばつぐん</span>' : mult < 1 ? '<span class="eff weak">いまひとつ</span>' : '';
-    return `<button class="mv-btn" data-mv="${i}" style="--mc:${mv.el ? ELEMENTS[mv.el].color : '#6d7391'}" ${m.pp <= 0 ? 'disabled' : ''}>${eff}<span class="mv-n">${mv.name}</span><span class="mv-d">${moveDesc(mv)}｜のこり${m.pp}</span></button>`;
-  }).join('');
-  const struggle = f.moves.every((m) => m.pp <= 0) ? '<button class="mv-btn" data-mv="-1"><span class="mv-n">わるあがき</span><span class="mv-d">わざが尽きた</span></button>' : '';
-  const canSwitch = legalActions(st, me).some((a) => a.type === 'switch');
-  $('#cmd').innerHTML = movesHtml + struggle + `<button class="mv-btn switch" id="b-sw" ${canSwitch ? '' : 'disabled'}><span class="mv-n">🔄 交代</span><span class="mv-d">ひかえと入れかえる</span></button>`;
-  $('#cmd').querySelectorAll('[data-mv]').forEach((b) => (b.onclick = () => submit({ type: 'move', idx: +b.dataset.mv })));
-  $('#b-sw').onclick = () => showSwitchMenu(false);
-  startTimer();
-}
-
-function showSwitchMenu(forced) {
-  const st = session.state, me = session.me;
-  const sd = st.sides[me];
-  if (forced) say('次に出す モンスターを えらんでね');
-  $('#cmd').innerHTML = sd.team.map((m, i) => {
-    const ok = i !== sd.active && m.hp > 0;
-    return `<button class="mv-btn sw-btn" data-sw="${i}" style="--mc:${ELEMENTS[m.el].color}" ${ok ? '' : 'disabled'}><img class="sticker" src="${session.teams[me][i].img}" alt=""><span><span class="mv-n">${esc(m.name)}</span><span class="mv-d">HP ${m.hp}/${m.maxHp}${i === sd.active ? '・場に出ている' : ''}</span></span></button>`;
-  }).join('') + (forced ? '' : '<button class="mv-btn back-btn" id="b-back"><span class="mv-n">もどる</span></button>');
-  $('#cmd').querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => submit({ type: 'switch', to: +b.dataset.sw })));
-  if (!forced) $('#b-back').onclick = showMoveMenu;
-  startTimer();
-}
+  if (side === session.me && session.state.sides[side].team[i].hp > 0) {
+    session.cmds[i] = null; session.cursor = i; drawPanel();
+  }
+});
 
 function startTimer() {
   clearInterval(session.timerId);
   const el = $('#b-timer');
   if (session.mode !== 'online') { el.textContent = ''; return; }
-  let left = 45;
+  let left = 60;
   el.textContent = `⏱ ${left}`; el.classList.remove('hurry');
   session.timerId = setInterval(() => {
     left--; el.textContent = `⏱ ${left}`; el.classList.toggle('hurry', left <= 10);
     if (left <= 0) {
       clearInterval(session.timerId);
-      const acts = legalActions(session.state, session.me);
-      if (acts.length) submit(acts[0]);
+      // 残りは「こうげき」で埋める
+      const st = session.state, me = session.me;
+      const foes = aliveIdx(st.sides[1 - me]);
+      for (const i of aliveIdx(st.sides[me])) if (!session.cmds[i]) session.cmds[i] = { skill: 'attack', target: foes[0] };
+      if (!cmdsValid(st, me, session.cmds)) session.cmds = session.cmds.map((c, i) => (st.sides[me].team[i].hp > 0 ? { skill: 'attack', target: foes[0] } : null));
+      submit(session.cmds.slice());
     }
   }, 1000);
 }
 
-function submit(action) {
+function submit(cmds) {
   clearInterval(session.timerId); $('#b-timer').textContent = '';
   const me = session.me, st = session.state;
-  if (action) {
-    $('#cmd').innerHTML = '<p class="wait-msg dots">相手を待っています</p>';
-  }
+  if (!cmdsValid(st, me, cmds)) { toast('指示を確認してね'); return; }
+  session.submitted = true;
+  document.querySelectorAll('.unit.cursor').forEach((x) => x.classList.remove('cursor'));
+  $('#panel').innerHTML = '<p class="p-hint dots">相手の指示を待っています</p>';
   if (session.mode === 'cpu') {
-    const foe = foeSide();
-    session.pending[me] = action;
-    session.pending[foe] = legalActions(st, foe).length ? cpuChoose(st, foe) : null;
+    session.pending = [null, null];
+    session.pending[me] = cmds;
+    session.pending[1 - me] = cpuCommands(st, 1 - me);
     runTurn();
     return;
   }
-  // オンライン
-  if (me === 0) { session.pending[0] = action; tryResolveHost(); }
-  else session.link.send({ t: 'act', turn: st.turn, phase: st.phase, a: action });
+  if (me === 0) { session.pending[0] = cmds; tryResolveHost(); }
+  else session.link.send({ t: 'cmds', turn: st.turn, cmds });
 }
 
-function needs(st, s) { return legalActions(st, s).length > 0; }
 function tryResolveHost() {
-  const st = session.state;
-  for (const s of [0, 1]) if (needs(st, s) && !session.pending[s]) return;
-  runTurn();
+  if (session.pending[0] && session.pending[1]) runTurn();
 }
 function runTurn() {
   const acts = session.pending; session.pending = [null, null];
+  const before = clone(session.state);
   const { state, events } = resolveTurn(session.state, acts);
   session.state = state;
   if (session.mode === 'online') session.link.send({ t: 'res', state, events });
-  playEvents(events, state).then(() => askAction());
+  playEvents(before, events, state);
 }
 
 function onBattleData(d) {
   const st = session.state;
-  if (d.t === 'act' && session.me === 0) {
-    if (d.turn !== st.turn || d.phase !== st.phase) return;
-    const a = d.a;
-    if (needs(st, 1)) {
-      if (!a || !isLegal(st, 1, a)) return;
-      session.pending[1] = { type: a.type, idx: a.idx, to: a.to };
-    }
+  if (d.t === 'cmds' && session.me === 0) {
+    if (d.turn !== st.turn || session.pending[1]) return;
+    const cmds = Array.isArray(d.cmds) ? d.cmds.map((c) => (c ? { skill: String(c.skill), target: c.target == null ? null : +c.target } : null)) : null;
+    if (!cmds || !cmdsValid(st, 1, cmds)) return;
+    session.pending[1] = cmds;
     tryResolveHost();
   } else if (d.t === 'res' && session.me === 1) {
+    const before = clone(session.state);
     session.state = d.state;
-    playEvents(d.events, d.state).then(() => askAction());
+    playEvents(before, d.events, d.state);
   } else if (d.t === 'rematch') {
     session.rematch[1 - session.me] = true; checkRematch();
   } else if (d.t === 'restart' && session.me === 1) {
-    const teams = session.teams, names = session.names, lk = session.link;
-    session.link = null; endBattleSession();
-    link = lk;
+    const { teams, names, link: lk } = session;
+    session.link = null; endBattleSession(); link = lk;
     startBattle({ mode: 'online', me: 1, teams, names, seed: d.seed >>> 0, link: lk });
   }
+}
+
+// ---- 演出 ----
+function fxOn(side, i, cls, html) {
+  const el = tileOf(side, i), table = $('#table');
+  const tr = table.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const fx = document.createElement('div');
+  fx.className = 'fx ' + cls; fx.innerHTML = html;
+  fx.style.left = r.left - tr.left + r.width / 2 + 'px'; fx.style.top = r.top - tr.top + r.height * 0.35 + 'px';
+  table.appendChild(fx);
+  setTimeout(() => fx.remove(), 1100);
+}
+function anim(side, i, cls) {
+  const el = tileOf(side, i);
+  el.classList.remove('act-me', 'act-foe', 'hit', 'pulse'); void el.offsetWidth; el.classList.add(cls);
+}
+const who = (side, view, i) => `${side === session.me ? '' : '相手の'}<b>${esc(view.sides[side].team[i].name)}</b>`;
+
+async function playEvents(view, events, finalState) {
+  session.busy = true; session.submitted = false;
+  session.tags = [[{}, {}, {}], [{}, {}, {}]];
+  document.querySelectorAll('.u-cmd').forEach((x) => (x.textContent = ''));
+  $('#panel').innerHTML = '';
+  for (const ev of events) {
+    if (!session || session.closed) return;
+    const tg = ev.side != null && ev.i != null ? session.tags[ev.side][ev.i] : null;
+    switch (ev.t) {
+      case 'turn': $('#b-turn').textContent = `ターン ${ev.turn} / ${MAX_TURNS}`; break;
+      case 'guard': tg.guard = true; renderUnit(view, ev.side, ev.i); anim(ev.side, ev.i, 'pulse'); say(`${who(ev.side, view, ev.i)} は ガードのかまえ`); await sleep(450); break;
+      case 'cover': tg.cover = true; renderUnit(view, ev.side, ev.i); anim(ev.side, ev.i, 'pulse'); say(`${who(ev.side, view, ev.i)} が ${esc(view.sides[ev.side].team[ev.ally].name)} の前に立った`); await sleep(650); break;
+      case 'barrier':
+        for (let k = 0; k < 3; k++) { session.tags[ev.side][k].barrier = true; renderUnit(view, ev.side, k); }
+        anim(ev.side, ev.i, 'pulse'); say(`${who(ev.side, view, ev.i)} の バリア！ 味方全員を守る`); await sleep(700); break;
+      case 'act': {
+        const sk = SKILLS[ev.skill];
+        say(`${who(ev.side, view, ev.i)} の ${sk.name}！`);
+        if (ev.skill !== 'attack') {
+          const bn = $('#banner'); bn.textContent = sk.name; bn.style.setProperty('--uc', ucol(session.teams[ev.side][ev.i]));
+          bn.classList.remove('show'); void bn.offsetWidth; bn.classList.add('show');
+        }
+        anim(ev.side, ev.i, sk.power ? (rowOf(ev.side) === 0 ? 'act-me' : 'act-foe') : 'pulse');
+        await sleep(sk.power ? 420 : 600); break;
+      }
+      case 'fail': view.sides[ev.side].team[ev.i].dazzled = false; renderUnit(view, ev.side, ev.i); say(`${who(ev.side, view, ev.i)} は まぶしくて 動けなかった`); await sleep(750); break;
+      case 'hit': {
+        const f = view.sides[ev.side].team[ev.i];
+        f.hp = ev.hp; renderUnit(view, ev.side, ev.i);
+        anim(ev.side, ev.i, 'hit');
+        const note = ev.adv > 0 ? '<em class="good">相性◎</em>' : ev.adv < 0 ? '<em class="bad">相性△</em>' : '';
+        fxOn(ev.side, ev.i, 'num' + (ev.crit ? ' crit' : ''), `${note}${ev.crit ? '<em>会心</em>' : ''}-${ev.amount}`);
+        if (ev.cover) say(`${who(ev.side, view, ev.i)} が かわりに受けた！`);
+        await sleep(430); break;
+      }
+      case 'heal': {
+        const f = view.sides[ev.side].team[ev.i];
+        f.hp = ev.hp; renderUnit(view, ev.side, ev.i);
+        fxOn(ev.side, ev.i, 'num heal', `+${ev.amount}`); await sleep(500); break;
+      }
+      case 'status': {
+        const f = view.sides[ev.side].team[ev.i];
+        if (ev.st === 'slow') f.slowTurns = 2;
+        if (ev.st === 'dazzle') f.dazzled = true;
+        if (ev.st === 'charge') { f.charged = true; say(`${who(ev.side, view, ev.i)} は 力をためている`); }
+        renderUnit(view, ev.side, ev.i); await sleep(ev.st === 'charge' ? 600 : 200); break;
+      }
+      case 'down': await sleep(200); view.sides[ev.side].team[ev.i].hp = 0; renderUnit(view, ev.side, ev.i); say(`${who(ev.side, view, ev.i)} は 力つきた`); await sleep(700); break;
+      case 'energy': renderEnergy(ev.values); break;
+      case 'end': if (ev.timeup) { say('時間切れ！ 残り体力で判定'); await sleep(900); } break;
+    }
+  }
+  session.tags = null;
+  renderAll(finalState);
+  session.busy = false;
+  if (finalState.phase === 'end') { await sleep(400); showResult(finalState.winner); return; }
+  startCommand();
 }
 
 function checkRematch() {
@@ -623,4 +682,16 @@ $('#btn-quit').onclick = () => {
   go('home');
 };
 
-go('home');
+// ===== 起動 =====
+(async () => {
+  const saved = store.get('mons', null);
+  if (saved) {
+    units = await migrate(saved);
+    if (units.length < 3) units = units.concat(makeStarters());
+    if (JSON.stringify(units) !== JSON.stringify(saved)) saveUnits();
+  } else { units = makeStarters(); saveUnits(); }
+  team = store.get('team', []).filter((id) => units.some((m) => m.id === id));
+  for (const m of units) if (team.length < 3 && !team.includes(m.id)) team.push(m.id);
+  saveTeam();
+  go('home');
+})();
