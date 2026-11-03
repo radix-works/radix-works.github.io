@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#141a33">
+<title>ウツシバトル</title>
+<meta name="description" content="写真に撮ったものがモンスターになる！ 3体のチームで友だちと対戦できるブラウザゲーム。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ホーム -->
+  <section class="screen" id="s-home">
+    <div class="home-hero">
+      <div class="logo"><span class="logo-sub">PHOTO MONSTER BATTLE</span><span class="logo-main">ウツシ<em>バトル</em></span></div>
+      <p class="tagline">撮ったものが、モンスターになる。</p>
+      <div class="home-team" id="home-team"></div>
+    </div>
+    <div class="home-menu">
+      <button class="btn btn-hero" data-go="create"><span class="ic">📸</span>撮影してつくる</button>
+      <button class="btn btn-battle" data-go="lobby"><span class="ic">⚔️</span>バトルする</button>
+      <div class="row2">
+        <button class="btn btn-sub" data-go="team"><span class="ic">🛡️</span>チーム編成</button>
+        <button class="btn btn-sub" data-go="collection"><span class="ic">📚</span>ずかん</button>
+      </div>
+      <button class="link-btn" id="btn-howto">あそびかた・属性の相性</button>
+    </div>
+  </section>
+
+  <!-- つくる -->
+  <section class="screen" id="s-create">
+    <header class="bar"><button class="back" data-go="home">‹</button><h2>モンスターをつくる</h2><span class="ai-state" id="ai-state"></span></header>
+    <div class="create-step" id="step-pick">
+      <div class="pick-illust">
+        <div class="frame-corner tl"></div><div class="frame-corner tr"></div><div class="frame-corner bl"></div><div class="frame-corner br"></div>
+        <div class="pick-emoji">🧸🌵☕️🐈</div>
+        <p>身のまわりの「もの」を撮ろう</p>
+      </div>
+      <label class="btn btn-hero file-btn"><input type="file" accept="image/*" capture="environment" id="in-camera"><span class="ic">📷</span>カメラで撮る</label>
+      <label class="btn btn-sub file-btn"><input type="file" accept="image/*" id="in-album"><span class="ic">🖼️</span>アルバムから選ぶ</label>
+      <ul class="tips">
+        <li>背景がシンプルだと、きれいに切り抜けます</li>
+        <li>色・形・大きさで、属性や能力が決まります</li>
+      </ul>
+    </div>
+    <div class="create-step" id="step-tap" hidden>
+      <p class="guide" id="tap-guide">切り抜きたいものを <b>タップ</b></p>
+      <div class="photo-stage" id="photo-stage">
+        <canvas id="photo-canvas"></canvas>
+        <div class="busy" id="cut-busy" hidden><div class="scan"></div><span>切り抜き中…</span></div>
+      </div>
+      <div class="cut-result" id="cut-result" hidden>
+        <div class="checker"><img id="cut-img" class="sticker" alt=""></div>
+        <div class="row2">
+          <button class="btn btn-sub" id="btn-retap">やり直す</button>
+          <button class="btn btn-hero" id="btn-birth">この子にする！</button>
+        </div>
+      </div>
+      <button class="link-btn" id="btn-repick">別の写真にする</button>
+    </div>
+    <div class="create-step" id="step-reveal" hidden>
+      <div class="reveal-stage" id="reveal-stage"></div>
+      <div class="reveal-actions" id="reveal-actions" hidden>
+        <button class="btn btn-sub" id="btn-again">もう1体つくる</button>
+        <button class="btn btn-hero" id="btn-toteam">チームに入れる</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ずかん -->
+  <section class="screen" id="s-collection">
+    <header class="bar"><button class="back" data-go="home">‹</button><h2>ずかん</h2><span class="count" id="col-count"></span></header>
+    <div class="grid" id="col-grid"></div>
+  </section>
+
+  <!-- チーム -->
+  <section class="screen" id="s-team">
+    <header class="bar"><button class="back" data-go="home">‹</button><h2>チーム編成</h2></header>
+    <p class="guide small">3体えらんでね。1番目が先発です。</p>
+    <div class="team-slots" id="team-slots"></div>
+    <div class="grid" id="team-grid"></div>
+  </section>
+
+  <!-- ロビー -->
+  <section class="screen" id="s-lobby">
+    <header class="bar"><button class="back" data-go="home">‹</button><h2>バトル</h2></header>
+    <div class="lobby">
+      <label class="name-field">プレイヤー名<input id="in-name" maxlength="12" placeholder="プレイヤー"></label>
+      <div class="lobby-team" id="lobby-team"></div>
+      <button class="btn btn-battle" id="btn-cpu"><span class="ic">🤖</span>CPUと練習</button>
+      <div class="online-box">
+        <h3>友だちと対戦（オンライン）</h3>
+        <button class="btn btn-hero" id="btn-host"><span class="ic">🏠</span>部屋をつくる</button>
+        <div class="join-row"><input id="in-code" inputmode="numeric" maxlength="6" placeholder="6けたの部屋番号"><button class="btn btn-sub" id="btn-join">入る</button></div>
+        <div class="room" id="room" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- バトル -->
+  <section class="screen" id="s-battle">
+    <div class="b-top"><button class="b-quit" id="btn-quit">にげる</button><span id="b-turn">ターン 1</span><span class="b-timer" id="b-timer"></span></div>
+    <div class="field" id="field">
+      <div class="plate foe" id="plate-1"></div>
+      <div class="spot foe" id="spot-1"><div class="shadow"></div><img class="mon sticker" id="mon-1" alt=""></div>
+      <div class="spot me" id="spot-0"><div class="shadow"></div><img class="mon sticker" id="mon-0" alt=""></div>
+      <div class="plate me" id="plate-0"></div>
+      <div class="banner" id="banner"></div>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="cmd" id="cmd"></div>
+  </section>
+</div>
+
+<div class="modal" id="modal" hidden><div class="modal-body" id="modal-body"></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
