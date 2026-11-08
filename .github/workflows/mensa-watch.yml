@@ -1,0 +1,49 @@
+name: Mensa入会テストの見張り
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5分ごとに起動し、中で1分ごとに確認
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "テスト通知を送る"
+        type: boolean
+        default: true
+
+concurrency:
+  group: mensa-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: mensa-watch
+
+      - name: 前回の記録を読み込む
+        uses: actions/cache/restore@v4
+        with:
+          path: mensa-watch/state.json
+          key: mensa-state-${{ github.run_id }}
+          restore-keys: mensa-state-
+
+      - name: テスト通知
+        if: github.event_name == 'workflow_dispatch' && inputs.test
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 mensa-watch/watch.py --test
+
+      - name: ページを確認（約4分半、1分ごと）
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 mensa-watch/watch.py --state mensa-watch/state.json --loop 270
+
+      - name: 記録を保存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: mensa-watch/state.json
+          key: mensa-state-${{ github.run_id }}-${{ github.run_attempt }}
