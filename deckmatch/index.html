@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>デックマッチ</title>
+<meta name="description" content="5本になると負けの『あのゲーム』が、戦略×リアルタイム対戦でアプリになって登場！App Store・Google Play で配信中。">
+<meta property="og:title" content="デックマッチ">
+<meta property="og:description" content="5本になると負けの『あのゲーム』が、戦略×リアルタイム対戦でアプリになって登場！App Store・Google Play で配信中。">
+<meta property="og:image" content="https://radix-works.github.io/deckmatch/img/feature.png">
+<meta property="og:url" content="https://radix-works.github.io/deckmatch/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@deckmatch_jp">
+<link rel="icon" href="img/icon.png">
+<script>
+/*
+ * 1 本のリンクで両方のストアへ（2026-11-14 根本さん「両方まとめたリンクとか普通つくれるよね？」。公式 X のウェブサイトの欄に入れる）。
+ * iPhone・iPad は App Store、Android は Google Play へそのまま飛ぶ。パソコンなどでは下のボタンを出す。
+ * 「?stay」を付けると飛ばずにこのページを出す（確かめ用）
+ */
+(function () {
+  if (location.search.indexOf('stay') >= 0) return;
+  var ua = navigator.userAgent || '';
+  var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios) location.replace('https://apps.apple.com/jp/app/id6820042199');
+  else if (/Android/.test(ua)) location.replace('https://play.google.com/store/apps/details?id=jp.deckmatch');
+})();
+</script>
+<style>
+:root { --ground:#eceff3; --paper:#fbfcfd; --ink:#1b2436; --sub:#4a5468; --gold:#8f7a4c; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--ground); color:var(--ink); font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif; line-height:1.7; }
+main { max-width: 560px; margin: 0 auto; padding: 40px 18px 64px; text-align: center; }
+.sheet { background:var(--paper); border:1.5px solid var(--ink); border-radius:6px; box-shadow:0 3px 0 var(--ink); padding: 28px 22px 32px; }
+.brand { color: var(--gold); letter-spacing: .3em; font-size: 12px; font-weight: 700; }
+.icon { width: 112px; height: 112px; border-radius: 24px; margin: 14px auto 8px; display: block; box-shadow: 0 2px 0 var(--ink); border: 1.5px solid var(--ink); }
+h1 { font-size: 28px; line-height: 1.3; margin: 6px 0 8px; letter-spacing: .06em; }
+.lead { color: var(--sub); font-size: 15px; margin: 0 0 22px; }
+.stores { display: flex; flex-direction: column; gap: 12px; }
+.store { display: block; text-decoration: none; background: var(--ink); color: #fff; border-radius: 8px; padding: 14px 16px; font-weight: 700; font-size: 16px; box-shadow: 0 3px 0 #0b1018; }
+.store small { display: block; font-weight: 400; font-size: 12px; opacity: .8; }
+.feature { width: 100%; border-radius: 6px; margin-top: 22px; border: 1.5px solid var(--ink); }
+.foot { margin-top: 18px; font-size: 13px; }
+.foot a { color: var(--sub); margin: 0 6px; }
+</style>
+</head>
+<body>
+<main>
+<div class="sheet">
+<div class="brand">DECK MATCH</div>
+<img class="icon" src="img/icon.png" alt="デックマッチ">
+<h1>デックマッチ</h1>
+<p class="lead">5本になると負けの『あのゲーム』が、<br>戦略×リアルタイム対戦で<br>アプリになって登場！</p>
+<div class="stores">
+<a class="store" href="https://apps.apple.com/jp/app/id6820042199"><small>iPhone・iPad</small>App Store で入手</a>
+<a class="store" href="https://play.google.com/store/apps/details?id=jp.deckmatch"><small>Android</small>Google Play で入手</a>
+</div>
+<img class="feature" src="img/feature.png" alt="">
+<div class="foot"><a href="https://x.com/deckmatch_jp">公式 X</a><a href="support/">サポート</a></div>
+</div>
+</main>
+</body>
+</html>
