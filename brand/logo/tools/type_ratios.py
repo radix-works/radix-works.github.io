@@ -43,14 +43,14 @@ b+=hd(Y+mh+40,tx+wr,tx+wr+sp,GRN,'語の間 1/φ',False)
 b+=f'<line x1="{X-60}" y1="{cyy}" x2="{tx+wr+sp+ww+30}" y2="{cyy}" stroke="{PUR}" stroke-dasharray="5 5"/>'+T('記号と文字の縦の真ん中をそろえる',tx+wr+sp+ww,base-c-14,15,PUR,'end')
 Y0=Y+mh+120
 # ③ 縦長
-mh=300; k=mh/MH; c=mh/F[4]; gap=c*F[1]; sp=c/F[1]
+mh=300; k=mh/MH; c=mh/F[4]; gap=c; sp=c/F[1]
 _,wr=text_hb('RADIX',J1,c,0,0,T1*2,PAIRS); _,ww=text_hb('WORKS',J2,c,0,0,T2/F[1]); tw=wr+sp+ww
 CX=560; Y=Y0+70; mx=CX-MW*k/2; tx=CX-tw/2; base=Y+mh+gap+c
 d1,_=text_hb('RADIX',J1,c,tx,base,T1*2,PAIRS); d2,_=text_hb('WORKS',J2,c,tx+wr+sp,base,T2/F[1])
 b+=T('縦長',30,Y0+40,24,SUB)
 b+=mark(k,mx,Y,INK,GOLD)+f'<path d="{d1}" fill="{INK}" fill-opacity=".85"/><path d="{d2}" fill="{GOLD}" fill-opacity=".85"/>'
 b+=vd(tx-40,Y,Y+mh,ACC,'記号の高さ 1',-1)
-b+=vd(tx+tw+40,Y+mh,base-c,GRN,'記号との間＝文字×φ')
+b+=vd(tx+tw+40,Y+mh,base-c,GRN,'記号との間＝文字の高さ')
 b+=vd(tx+tw+40,base-c,base,BLUE,'文字 1/φ⁴')
 b+=hd(base+40,tx+wr,tx+wr+sp,GRN,'語の間＝文字÷φ',False)
 H=base+130

@@ -138,7 +138,7 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
   <dl class="spec">
     <div><dt>横長 2 行</dt><dd>文字のかたまり（RADIX・行の間・WORKS）の高さ：記号の高さ＝1：φ。WORKS＝RADIX÷φ、行の間＝WORKS÷φ（このため RADIX の大文字は記号の高さの 1/(2φ)）、記号と文字の間＝RADIX÷φ、文字の上のあき：下のあき＝1：φ。文字は左寄せ</dd></div>
     <div><dt>横長 1 行</dt><dd>記号の高さ＝文字の大文字の高さ×φ。記号と文字の間、RADIX と WORKS の間＝文字の高さ÷φ。記号と文字の縦の真ん中をそろえる</dd></div>
-    <div><dt>縦長</dt><dd>文字の大文字の高さ＝記号の高さ÷φ⁴。記号と文字の間＝文字の高さ×φ。左右の真ん中にそろえる</dd></div>
+    <div><dt>縦長</dt><dd>文字の大文字の高さ＝記号の高さ÷φ⁴。記号と文字の間＝文字の高さ。左右は外枠の真ん中にそろえる</dd></div>
   </dl>
 </div></section>
 

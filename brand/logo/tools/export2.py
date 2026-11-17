@@ -36,9 +36,10 @@ def horizontal(fg, sub, gd, bg, mh=200, n1=None):
     W = tx + w1 + pad; H = mh + 2 * pad
     return svg(W, H, mark(k, pad, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
-def vertical(fg, sub, gd, bg, mh=300):
-    """縦長：記号の下に RADIX WORKS を 1 行。大文字の高さ＝記号の高さ÷φ⁴、記号との間＝大文字の高さ×φ、語の間＝大文字の高さ÷φ"""
-    k = mh / MH; c = mh / F[4]; gap = c * F[1]; sp = c / F[1]
+def vertical(fg, sub, gd, bg, mh=300, gapk=None):
+    """縦長：記号の下に RADIX WORKS を 1 行。大文字の高さ＝記号の高さ÷φ⁴、記号との間＝大文字の高さ、語の間＝大文字の高さ÷φ"""
+    # 記号と文字の間＝文字の高さ（2026-11-17 根本さん「一段詰めで」）
+    k = mh / MH; c = mh / F[4]; gap = c * (1.0 if gapk is None else gapk); sp = c / F[1]
     _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, T2 / F[1])
     tw = wr + sp + ww
     pad = c * F[2]
@@ -79,6 +80,18 @@ def wide_small(fg, sub, gd, bg, c=80, ratio=1.0):
     d1, _ = text_hb('RADIX', J1, c, tx, base, T1 * 2, PAIRS); d2, _ = text_hb('WORKS', J2, c, tx + wr + sp, base, t2)
     W = tx + wr + sp + ww + pad
     return svg(W, H, mark(k, pad, cy - mh / 2, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
+
+
+def stacked_wide(fg, sub, gd, bg, mh=300, n=2.0):
+    """記号の下に大きな文字を 1 行（全体は横長）。大文字の高さ＝記号の高さ÷φⁿ、記号と文字の間＝記号の高さ÷φ⁴（縦長と同じ長さ）、
+    語の間＝大文字の高さ÷φ、左右は外枠の真ん中"""
+    k = mh / MH; c = mh / PHI ** n; gap = mh / F[4]; sp = c / F[1]
+    _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, T2 / F[1])
+    tw = wr + sp + ww; pad = mh / F[3]
+    W = max(tw, MW * k) + 2 * pad; H = pad + mh + gap + c + pad
+    mx = (W - MW * k) / 2; tx = (W - tw) / 2; base = pad + mh + gap + c
+    d1, _ = text_hb('RADIX', J1, c, tx, base, T1 * 2, PAIRS); d2, _ = text_hb('WORKS', J2, c, tx + wr + sp, base, T2 / F[1])
+    return svg(W, H, mark(k, mx, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
 
 if __name__ == '__main__':
