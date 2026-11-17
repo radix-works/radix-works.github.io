@@ -57,7 +57,9 @@ def build(p):
     cc = max((c1, c2), key=lambda c: c[1]); circles.append((cc, F[4], 'φ⁴', 'あご'))
     shape = shape.difference(disc(cc, F[4]).intersection(disc(O, RO)))
     shape = unary_union([shape, disc(pc, pr)])
-    body = shape.difference(beak.buffer(0.001))
+    # 組み合わせでできたごく細いすき間を埋める（太らせて同じだけ細らせる）
+    shape = shape.buffer(0.01, join_style=2, mitre_limit=10).buffer(-0.01, join_style=2, mitre_limit=10)
+    body = shape   # くちばしは体の上に重ねて塗る（境目にすき間を作らない）
     pts = dict(L=L, TL=TL, P=P, M=M, Q=Q, TF=TF, BT=BT, B1=B1, B2=B2)
     return shape, body, beak, circles, pts
 
