@@ -53,6 +53,20 @@ b+=vd(tx-40,Y,Y+mh,ACC,'記号の高さ 1',-1)
 b+=vd(tx+tw+40,Y+mh,base-c,GRN,'記号との間＝文字の高さ')
 b+=vd(tx+tw+40,base-c,base,BLUE,'文字 1/φ⁴')
 b+=hd(base+40,tx+wr,tx+wr+sp,GRN,'語の間＝文字÷φ',False)
+
+Y0=base+110
+# ④ 記号の下に大きな文字
+mh=220; k=mh/MH; c=mh/F[2]; gap=mh/F[4]; sp=c/F[1]
+_,wr=text_hb('RADIX',J1,c,0,0,T1*2,PAIRS); _,ww=text_hb('WORKS',J2,c,0,0,T2/F[1]); tw=wr+sp+ww
+tx=160; Y=Y0+70; mcx=tx+wr/2; mx=mcx-MW*k/2; base=Y+mh+gap+c
+d1,_=text_hb('RADIX',J1,c,tx,base,T1*2,PAIRS); d2,_=text_hb('WORKS',J2,c,tx+wr+sp,base,T2/F[1])
+b+=T('記号の下に大きな文字',30,Y0+40,24,SUB)
+b+=mark(k,mx,Y,INK,GOLD)+f'<path d="{d1}" fill="{INK}" fill-opacity=".85"/><path d="{d2}" fill="{GOLD}" fill-opacity=".85"/>'
+b+=vd(tx-40,Y,Y+mh,ACC,'記号の高さ 1',-1)
+b+=vd(tx+tw+40,base-c,base,BLUE,'文字 1/φ²')
+b+=vd(tx+tw+40,Y+mh,base-c,GRN,'記号との間 1/φ⁴')
+b+=hd(base+40,tx,tx+wr,PUR,'RADIX',False)
+b+=f'<line x1="{mcx}" y1="{Y-20}" x2="{mcx}" y2="{base+40}" stroke="{PUR}" stroke-dasharray="5 5"/>'+T('ペンギンの真ん中＝RADIX の真ん中',mcx+8,Y-6,15,PUR)
 H=base+130
 b+=T('どの形も：RADIX と WORKS の字の間は、書体の詰め＋目で合わせた詰め。WORKS は RADIX より一段細い',30,H-20,15,SUB)
 open('type_ratios.svg','w').write(f'<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="{H:.0f}" viewBox="0 0 1400 {H:.0f}"><rect width="100%" height="100%" fill="#fbfcfd"/>{b}</svg>')

@@ -107,10 +107,11 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
 </div></section>
 
 <section id="lockups"><h2><small>LOCKUPS</small>ロゴの種類</h2><div class="body">
-  <p>形は 5 種類です。アイコン以外は、明るい地に置く版（左）と、暗い地に置くクリーム色の版（右）があります。ファイルには地の色は入っていません。見本の地は置き場所の例です。</p>
+  <p>形は 6 種類です。アイコン以外は、明るい地に置く版（左）と、暗い地に置くクリーム色の版（右）があります。ファイルには地の色は入っていません。見本の地は置き場所の例です。</p>
   {variant('横長 1 行','wide','ウェブサイトの見出し、名刺、横に細長い場所。いちばんよく使う形')}
   {variant('横長 2 行','horizontal','横幅が足りない所。資料の表紙、署名')}
   {variant('縦長','vertical','正方形に近い場所。ポスター、表紙の中央')}
+  {variant('記号の下に大きな文字','stacked','社名をはっきり見せたい横長の場所。看板、サイトの大きな見出し、動画の最後')}
   {variant('記号だけ','mark','社名が別に書かれている所、小さな場所、SNS のプロフィール画像')}
   <figure class="variant"><div class="small-row"><div class="plate icon-plate">{V('icon')}</div></div>
   <figcaption><strong>アイコン</strong><span>アプリやサイトのアイコン。夜の紺の角丸の地に、クリーム色の記号</span><code>radixworks-icon.svg</code></figcaption></figure>
@@ -138,6 +139,7 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
   <dl class="spec">
     <div><dt>横長 2 行</dt><dd>文字のかたまり（RADIX・行の間・WORKS）の高さ：記号の高さ＝1：φ。WORKS＝RADIX÷φ、行の間＝WORKS÷φ（このため RADIX の大文字は記号の高さの 1/(2φ)）、記号と文字の間＝RADIX÷φ、文字の上のあき：下のあき＝1：φ。文字は左寄せ</dd></div>
     <div><dt>横長 1 行</dt><dd>記号の高さ＝文字の大文字の高さ×φ。記号と文字の間、RADIX と WORKS の間＝文字の高さ÷φ。記号と文字の縦の真ん中をそろえる</dd></div>
+    <div><dt>記号の下に大きな文字</dt><dd>文字の大文字の高さ＝記号の高さ÷φ²。記号と文字の間＝記号の高さ÷φ⁴。ペンギン（記号の外枠）の真ん中を、RADIX の真ん中にそろえる</dd></div>
     <div><dt>縦長</dt><dd>文字の大文字の高さ＝記号の高さ÷φ⁴。記号と文字の間＝文字の高さ。左右は外枠の真ん中にそろえる</dd></div>
   </dl>
 </div></section>
@@ -183,6 +185,8 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
     <li><code>radixworks-horizontal-cream.svg</code><span>横長 2 行（暗い地用）</span></li>
     <li><code>radixworks-vertical.svg</code><span>縦長（明るい地用）</span></li>
     <li><code>radixworks-vertical-cream.svg</code><span>縦長（暗い地用）</span></li>
+    <li><code>radixworks-stacked.svg</code><span>記号の下に大きな文字（明るい地用）</span></li>
+    <li><code>radixworks-stacked-cream.svg</code><span>記号の下に大きな文字（暗い地用）</span></li>
     <li><code>radixworks-mark.svg</code><span>記号だけ（明るい地用）</span></li>
     <li><code>radixworks-mark-cream.svg</code><span>記号だけ（暗い地用）</span></li>
     <li><code>radixworks-icon.svg</code><span>アイコン（角丸の地つき）</span></li>

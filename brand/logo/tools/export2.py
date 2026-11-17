@@ -82,14 +82,19 @@ def wide_small(fg, sub, gd, bg, c=80, ratio=1.0):
     return svg(W, H, mark(k, pad, cy - mh / 2, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
 
-def stacked_wide(fg, sub, gd, bg, mh=300, n=2.0):
+def stacked_wide(fg, sub, gd, bg, mh=300, n=2.0, pos='center'):
     """記号の下に大きな文字を 1 行（全体は横長）。大文字の高さ＝記号の高さ÷φⁿ、記号と文字の間＝記号の高さ÷φ⁴（縦長と同じ長さ）、
     語の間＝大文字の高さ÷φ、左右は外枠の真ん中"""
     k = mh / MH; c = mh / PHI ** n; gap = mh / F[4]; sp = c / F[1]
     _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, T2 / F[1])
     tw = wr + sp + ww; pad = mh / F[3]
     W = max(tw, MW * k) + 2 * pad; H = pad + mh + gap + c + pad
-    mx = (W - MW * k) / 2; tx = (W - tw) / 2; base = pad + mh + gap + c
+    tx = (W - tw) / 2; base = pad + mh + gap + c
+    if pos == 'center': mcx = tx + tw / 2
+    elif pos == 'golden': mcx = tx + tw / F[2]          # 文字の幅を 1/φ²：1/φ に分ける所
+    elif pos == 'radix': mcx = tx + wr / 2              # RADIX の真ん中
+    elif pos == 'left': mcx = tx + MW * k / 2           # 左そろえ
+    mx = mcx - MW * k / 2
     d1, _ = text_hb('RADIX', J1, c, tx, base, T1 * 2, PAIRS); d2, _ = text_hb('WORKS', J2, c, tx + wr + sp, base, T2 / F[1])
     return svg(W, H, mark(k, mx, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
@@ -105,6 +110,9 @@ if __name__ == '__main__':
         'icon': icon(),
         'logo-wide': wide_small(INK, GOLD, GOLD, None, ratio=F[1]),            # 記号の高さ＝文字の高さ×φ（2026-11-17 根本さん）
         'logo-wide-dark': wide_small(CREAM, GOLDD, GOLDD, NAVY, ratio=F[1]),
+        # 記号の下に大きな文字：文字＝記号÷φ²、ペンギンは RADIX の真ん中（2026-11-17 根本さん「3で」）
+        'logo-stacked': stacked_wide(INK, GOLD, GOLD, None, n=2.0, pos='radix'),
+        'logo-stacked-dark': stacked_wide(CREAM, GOLDD, GOLDD, NAVY, n=2.0, pos='radix'),
     }
     for n, t in out.items(): open(f'{O}/{n}.svg', 'w').write(t)
     print('ok', list(out))
