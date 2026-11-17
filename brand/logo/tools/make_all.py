@@ -12,7 +12,10 @@ types = {'wide': lambda fg, sub, gd: e.wide_small(fg, sub, gd, None, ratio=e.F[1
 schemes = {'': (e.INK, e.GOLD, e.GOLD, '#ffffff', 'on-white'),
            '-cream': (e.CREAM, e.GOLDD, e.GOLDD, e.NAVY, 'on-navy'),
            '-gray': (e.G_INK, e.G_GOLD, e.G_GOLD, '#ffffff', 'gray-on-white'),
-           '-gray-cream': (e.G_CREAM, e.G_GOLDD, e.G_GOLDD, e.G_NAVY, 'gray-on-black')}
+           '-gray-cream': (e.G_CREAM, e.G_GOLDD, e.G_GOLDD, e.G_NAVY, 'gray-on-black'),
+           # 一色：くちばしと WORKS も同じ色（はんこ・刺しゅう・切り文字・焼き印など）
+           '-black': ('#000000', '#000000', '#000000', '#ffffff', 'black-on-white'),
+           '-white': ('#ffffff', '#ffffff', '#ffffff', '#000000', 'white-on-black')}
 for d in ['svg', 'svg-bg', 'png', 'png-bg']:
     os.makedirs(f'{O}/{d}', exist_ok=True)
     for f in glob.glob(f'{O}/{d}/*'): os.remove(f)
@@ -27,7 +30,7 @@ for t, fn in types.items():
         pb = f'{O}/svg-bg/radixworks-{t}-{bgname}.svg'; open(pb, 'w').write(with_bg(s, bg)); jobs.append((pb, f'{O}/png-bg/radixworks-{t}-{bgname}.png'))
 # アイコン（地あり）
 S = 1024; kk = S / e.F[1] / e.MH
-for suf, (bgc, body, beak) in {'': (e.NAVY, e.CREAM, e.GOLDD), '-gray': (e.G_NAVY, e.G_CREAM, e.G_GOLDD)}.items():
+for suf, (bgc, body, beak) in {'': (e.NAVY, e.CREAM, e.GOLDD), '-gray': (e.G_NAVY, e.G_CREAM, e.G_GOLDD), '-black': ('#000000', '#ffffff', '#ffffff')}.items():
     s = e.svg(S, S, f'<rect width="{S}" height="{S}" rx="{S*0.22:.0f}" fill="{bgc}"/>' + e.mark(kk, (S - e.MW * kk) / 2, (S - e.MH * kk) / 2, body, beak))
     p = f'{O}/svg/radixworks-icon{suf}.svg'; open(p, 'w').write(s); jobs.append((p, f'{O}/png/radixworks-icon{suf}.png'))
 for src, dst in jobs:

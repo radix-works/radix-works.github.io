@@ -21,3 +21,4 @@ sheet('overview.png', lambda k:[(f'png/radixworks-{k}.png',(251,252,253,255)),(f
 sheet('overview-bg.png', lambda k:[(f'png-bg/radixworks-{k}-on-white.png',None),(f'png-bg/radixworks-{k}-on-navy.png',None)], (200,205,214))
 sheet('overview-gray.png', lambda k:[(f'png-bg/radixworks-{k}-gray-on-white.png',None),(f'png-bg/radixworks-{k}-gray-on-black.png',None)], (200,200,200), ['png/radixworks-icon-gray.png'])
 print('ok')
+sheet('overview-mono.png', lambda k:[(f'png-bg/radixworks-{k}-black-on-white.png',None),(f'png-bg/radixworks-{k}-white-on-black.png',None)], (200,200,200), ['png/radixworks-icon-black.png'])

@@ -121,7 +121,8 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
   <ul class="swatches">{sw}</ul>
   <dl class="spec">
     <div><dt>CMYK（印刷）</dt><dd>上質なコート紙のオフセット印刷用の色の変換表（FOGRA39）で、画面の色から変換した数。C / M / Y / K の順。印刷所によって紙や刷り方が違うので、初めて刷るときは色校正で確かめる</dd></div>
-    <div><dt>グレー（一色）</dt><dd>各色と同じ明るさのグレー。白黒の印刷、はんこ、刺しゅうなど、色を使えない所ではグレーの版を使う</dd></div>
+    <div><dt>グレー</dt><dd>各色と同じ明るさの 2 つのグレー。白黒のコピー・プリンター・新聞など、濃淡を出せる白黒の印刷で使う</dd></div>
+    <div><dt>一色（黒・白）</dt><dd>すべてを 1 つの色で塗った版。くちばしと WORKS も同じ色。はんこ、刺しゅう、切り文字、焼き印、彫刻、1 色だけのシルク印刷など、濃淡を出せない所で使う</dd></div>
   </dl>
   <p class="note">明るい地の版は、白や淡い色の上に置きます。クリーム色の版は、夜の紺など暗い色の上に置きます。地の色とロゴの色の明るさに十分な差がない所には置きません。</p>
 </div></section>
@@ -199,15 +200,20 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
     <li><code>radixworks-mark-cream.svg</code><span>記号だけ（暗い地用）</span></li>
     <li><code>radixworks-icon.svg</code><span>アイコン（角丸の地つき）</span></li>
   </ul>
-  <p>グレーの版と、地の色を入れた版もあります（〇〇＝wide・horizontal・stacked・vertical・mark）。</p>
+  <p>グレーの版、一色の版、地の色を入れた版もあります（〇〇＝wide・horizontal・stacked・vertical・mark）。</p>
   <ul class="files">
     <li><code>radixworks-〇〇-gray.svg</code><span>グレーの版（明るい地用）</span></li>
     <li><code>radixworks-〇〇-gray-cream.svg</code><span>グレーの版（暗い地用）</span></li>
     <li><code>radixworks-icon-gray.svg</code><span>アイコンのグレーの版</span></li>
+    <li><code>radixworks-〇〇-black.svg</code><span>黒一色（明るい地用）</span></li>
+    <li><code>radixworks-〇〇-white.svg</code><span>白一色（暗い地用）</span></li>
+    <li><code>radixworks-icon-black.svg</code><span>アイコンの一色の版（黒の角丸の地に白抜き）</span></li>
     <li><code>radixworks-〇〇-on-white.svg</code><span>地あり：白の地に、明るい地用のロゴ</span></li>
     <li><code>radixworks-〇〇-on-navy.svg</code><span>地あり：夜の紺の地に、クリーム色のロゴ</span></li>
     <li><code>radixworks-〇〇-gray-on-white.svg</code><span>地あり：白の地に、グレーの版</span></li>
     <li><code>radixworks-〇〇-gray-on-black.svg</code><span>地あり：黒の地に、グレーの暗い地用の版</span></li>
+    <li><code>radixworks-〇〇-black-on-white.svg</code><span>地あり：白の地に黒一色</span></li>
+    <li><code>radixworks-〇〇-white-on-black.svg</code><span>地あり：黒の地に白一色</span></li>
   </ul>
   <p class="note">地ありの版は ZIP の with-background に入っています。地の大きさは、まわりの余白を含めたロゴの外枠と同じです。</p>
   <p class="note">保存場所：radix-works.github.io の作業用の枝の brand/logo/svg（地なし）と brand/logo/svg-bg（地あり）。PNG の画像は brand/logo/png と brand/logo/png-bg にあります。</p>
