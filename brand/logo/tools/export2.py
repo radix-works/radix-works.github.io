@@ -12,9 +12,11 @@ T2 = 1 / F[3]        # WORKS の字の間
 s, body, beak, circ, pts = build(PA)
 x0, y0, x1, y1 = s.bounds; MW, MH = x1 - x0, y1 - y0
 
+SIMPLIFY = 0.0004   # 点を間引く許し幅（記号の単位。幅 4,400px に広げても 0.1px ほど）
+body_s = body.simplify(SIMPLIFY, preserve_topology=True); beak_s = beak.simplify(SIMPLIFY, preserve_topology=True)
 def mark(k, x, y, fg, gd):
     ox, oy = x - x0 * k, y - y0 * k
-    return f'<path d="{to_path(body,k,ox,oy)}" fill="{fg}" fill-rule="evenodd"/><path d="{to_path(beak,k,ox,oy)}" fill="{gd}"/>'
+    return f'<path d="{to_path(body_s,k,ox,oy)}" fill="{fg}" fill-rule="evenodd"/><path d="{to_path(beak_s,k,ox,oy)}" fill="{gd}"/>'
 
 def svg(w, h, inner, bg=None):
     r = ''   # ロゴのファイルには地を入れない（2026-11-17 根本さん「ロゴって背景も含むつもり？」）
