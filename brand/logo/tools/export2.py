@@ -6,6 +6,8 @@ O = sys.argv[1] if len(sys.argv) > 1 else '/home/user/radix-works.github.io/bran
 FD = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 J1, J2 = f'{FD}/jost600.ttf', f'{FD}/jost500.ttf'
 INK, PAPER, GOLD, NAVY, CREAM, GOLDD = '#1b2436', '#fbfcfd', '#8f7a4c', '#121a2a', '#ece5d3', '#c9a96a'
+# グレーの版：各色と同じ明るさのグレー（2026-11-17 根本さん「一色のものはグレースケール」）
+G_INK, G_GOLD, G_CREAM, G_GOLDD, G_NAVY = '#242424', '#7c7c7c', '#e5e5e5', '#adadad', '#1a1a1a'
 PAIRS = {'RA': -0.035, 'AD': -0.02, 'DI': -0.01, 'IX': -0.02}   # 目で合わせた字の組の詰め（大文字の高さに対する割合）
 T1 = 0.06            # RADIX の字の間
 T2 = 1 / F[3]        # WORKS の字の間
@@ -49,7 +51,7 @@ def vertical(fg, sub, gd, bg, mh=300, gapk=None):
     return svg(W, H, mark(k, mx, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
 def mark_only(fg, gd, bg, mh=400):
-    k = mh / MH; pad = mh / F[3]
+    k = mh / MH; pad = mh / F[2]   # まわりの余白＝記号の高さ÷φ²（2026-11-17 決定）
     return svg(MW * k + 2 * pad, mh + 2 * pad, mark(k, pad, pad, fg, gd), bg)
 
 def icon(S=1024):
@@ -87,7 +89,7 @@ def stacked_wide(fg, sub, gd, bg, mh=300, n=2.0, pos='center'):
     語の間＝大文字の高さ÷φ、左右は外枠の真ん中"""
     k = mh / MH; c = mh / PHI ** n; gap = mh / F[4]; sp = c / F[1]
     _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, T2 / F[1])
-    tw = wr + sp + ww; pad = mh / F[3]
+    tw = wr + sp + ww; pad = mh / F[2]   # まわりの余白＝記号の高さ÷φ²
     W = max(tw, MW * k) + 2 * pad; H = pad + mh + gap + c + pad
     tx = (W - tw) / 2; base = pad + mh + gap + c
     if pos == 'center': mcx = tx + tw / 2

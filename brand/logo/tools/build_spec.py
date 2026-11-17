@@ -15,12 +15,12 @@ def variant(title, name, use, light=True):
   </div>
   <figcaption><strong>{title}</strong><span>{use}</span><code>radixworks-{name}.svg ／ radixworks-{name}-cream.svg</code></figcaption>
 </figure>'''
-colors=[('紺','#1b2436','27, 36, 54','明るい地の記号と RADIX'),
-        ('金','#8f7a4c','143, 122, 76','明るい地のくちばしと WORKS'),
-        ('クリーム','#ece5d3','236, 229, 211','暗い地の記号と RADIX'),
-        ('明るい金','#c9a96a','201, 169, 106','暗い地のくちばしと WORKS'),
-        ('夜の紺','#121a2a','18, 26, 42','アイコンの地。クリーム色の版を置く地のおすすめ')]
-sw=''.join(f'<li class="swatch"><span class="chip" style="background:{h}"></span><div><strong>{n}</strong><code>{h}</code><code>RGB {rgb}</code><span>{u}</span></div></li>' for n,h,rgb,u in colors)
+colors=[('紺','#1b2436','27, 36, 54','93 / 64 / 15 / 86','#242424','明るい地の記号と RADIX'),
+        ('金','#8f7a4c','143, 122, 76','44 / 45 / 78 / 20','#7c7c7c','明るい地のくちばしと WORKS'),
+        ('クリーム','#ece5d3','236, 229, 211','10 / 9 / 20 / 0','#e5e5e5','暗い地の記号と RADIX'),
+        ('明るい金','#c9a96a','201, 169, 106','25 / 33 / 66 / 3','#adadad','暗い地のくちばしと WORKS'),
+        ('夜の紺','#121a2a','18, 26, 42','95 / 65 / 14 / 92','#1a1a1a','アイコンの地。クリーム色の版を置く地のおすすめ')]
+sw=''.join(f'<li class="swatch"><span class="chip" style="background:{h}"></span><div><strong>{n}</strong><code>{h}</code><code>RGB {rgb}</code><code>CMYK {cm}</code><code>グレー {g}</code><span>{u}</span></div></li>' for n,h,rgb,cm,g,u in colors)
 page=f'''<title>Radix Works ロゴ仕様書</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap">
@@ -93,7 +93,7 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
 <header class="cover">
   <div class="eyebrow">Brand guideline · Logo</div>
   <h1>Radix Works ロゴ仕様書</h1>
-  <div class="meta"><span>版：仮完成</span><span>2026年11月17日</span></div>
+  <div class="meta"><span>版：完成</span><span>2026年11月17日</span></div>
   <div class="plate light">{V('wide')}</div>
 </header>
 
@@ -119,6 +119,10 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
 
 <section id="color"><h2><small>COLOR</small>色</h2><div class="body">
   <ul class="swatches">{sw}</ul>
+  <dl class="spec">
+    <div><dt>CMYK（印刷）</dt><dd>上質なコート紙のオフセット印刷用の色の変換表（FOGRA39）で、画面の色から変換した数。C / M / Y / K の順。印刷所によって紙や刷り方が違うので、初めて刷るときは色校正で確かめる</dd></div>
+    <div><dt>グレー（一色）</dt><dd>各色と同じ明るさのグレー。白黒の印刷、はんこ、刺しゅうなど、色を使えない所ではグレーの版を使う</dd></div>
+  </dl>
   <p class="note">明るい地の版は、白や淡い色の上に置きます。クリーム色の版は、夜の紺など暗い色の上に置きます。地の色とロゴの色の明るさに十分な差がない所には置きません。</p>
 </div></section>
 
@@ -159,10 +163,14 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
 
 <section id="space"><h2><small>CLEAR SPACE</small>余白と最小の大きさ</h2><div class="body">
   <dl class="spec">
-    <div><dt>まわりの余白（提案）</dt><dd>ロゴのまわりには、記号の高さ÷φ³（約 0.24 倍）以上のあきを取り、ほかの文字や絵を入れない</dd></div>
-    <div><dt>最小の大きさ（提案）</dt><dd>画面では記号の高さ 32px 以上。これより小さい所では、目とくちばしがつぶれる。印刷の最小の大きさは、実物を刷って確かめてから決める</dd></div>
+    <div><dt>まわりの余白</dt><dd>どの形も、ロゴのまわりに記号の高さ÷φ²（約 0.38 倍）以上のあきを取り、ほかの文字や絵を入れない。ファイルの外枠には、このあきがはじめから入っている</dd></div>
+    <div><dt>横長 1 行</dt><dd>画面：記号の高さ 16px 以上　印刷：記号の高さ 5mm 以上</dd></div>
+    <div><dt>横長 2 行</dt><dd>画面：記号の高さ 32px 以上　印刷：記号の高さ 8mm 以上</dd></div>
+    <div><dt>記号の下に大きな文字</dt><dd>画面：記号の高さ 24px 以上　印刷：記号の高さ 5mm 以上</dd></div>
+    <div><dt>縦長</dt><dd>画面：記号の高さ 48px 以上　印刷：記号の高さ 10.5mm 以上</dd></div>
+    <div><dt>記号だけ</dt><dd>画面：記号の高さ 24px 以上　印刷：記号の高さ 5mm 以上</dd></div>
   </dl>
-  <p class="note">余白と最小の大きさは、この仕様書で決めた案です。最小の大きさは画面で見た目安で、スマホや印刷の実物ではまだ確かめていません。</p>
+  <p class="note">画面の大きさは、実際の画面の大きさで描いて、目・くちばし・文字がつぶれない所で決めました。印刷の大きさは、いちばん小さい文字の大文字の高さが 1.5mm 以上、記号の高さが 5mm 以上になるように計算したものです。</p>
 </div></section>
 
 <section id="dont"><h2><small>DON'T</small>してはいけないこと</h2><div class="body">
@@ -191,14 +199,20 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
     <li><code>radixworks-mark-cream.svg</code><span>記号だけ（暗い地用）</span></li>
     <li><code>radixworks-icon.svg</code><span>アイコン（角丸の地つき）</span></li>
   </ul>
-  <p>地の色を入れた版もあります（ZIP の with-background）。地の大きさは、まわりの余白を含めたロゴの外枠と同じです。</p>
+  <p>グレーの版と、地の色を入れた版もあります（〇〇＝wide・horizontal・stacked・vertical・mark）。</p>
   <ul class="files">
-    <li><code>radixworks-〇〇-on-white.svg</code><span>白の地に、明るい地用のロゴ（〇〇＝wide・horizontal・stacked・vertical・mark）</span></li>
-    <li><code>radixworks-〇〇-on-navy.svg</code><span>夜の紺の地に、クリーム色のロゴ</span></li>
+    <li><code>radixworks-〇〇-gray.svg</code><span>グレーの版（明るい地用）</span></li>
+    <li><code>radixworks-〇〇-gray-cream.svg</code><span>グレーの版（暗い地用）</span></li>
+    <li><code>radixworks-icon-gray.svg</code><span>アイコンのグレーの版</span></li>
+    <li><code>radixworks-〇〇-on-white.svg</code><span>地あり：白の地に、明るい地用のロゴ</span></li>
+    <li><code>radixworks-〇〇-on-navy.svg</code><span>地あり：夜の紺の地に、クリーム色のロゴ</span></li>
+    <li><code>radixworks-〇〇-gray-on-white.svg</code><span>地あり：白の地に、グレーの版</span></li>
+    <li><code>radixworks-〇〇-gray-on-black.svg</code><span>地あり：黒の地に、グレーの暗い地用の版</span></li>
   </ul>
-  <p class="note">保存場所：radix-works.github.io の作業用の枝の brand/logo/svg（地なし）と brand/logo/svg-bg（地あり）。PNG の画像は brand/logo と brand/logo/png-bg にあります。</p>
+  <p class="note">地ありの版は ZIP の with-background に入っています。地の大きさは、まわりの余白を含めたロゴの外枠と同じです。</p>
+  <p class="note">保存場所：radix-works.github.io の作業用の枝の brand/logo/svg（地なし）と brand/logo/svg-bg（地あり）。PNG の画像は brand/logo/png と brand/logo/png-bg にあります。</p>
 </div></section>
-<footer>Radix Works ロゴ仕様書　仮完成　2026年11月17日</footer>
+<footer>Radix Works ロゴ仕様書　完成　2026年11月17日</footer>
 </main>'''
 open('spec/index.html','w').write(page)
 import os; print(os.path.getsize('spec/index.html'))
