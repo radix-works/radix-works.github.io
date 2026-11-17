@@ -17,7 +17,7 @@ def mark(k, x, y, fg, gd):
     return f'<path d="{to_path(body,k,ox,oy)}" fill="{fg}" fill-rule="evenodd"/><path d="{to_path(beak,k,ox,oy)}" fill="{gd}"/>'
 
 def svg(w, h, inner, bg=None):
-    r = f'<rect width="{w:.0f}" height="{h:.0f}" fill="{bg}"/>' if bg else ''
+    r = ''   # ロゴのファイルには地を入れない（2026-11-17 根本さん「ロゴって背景も含むつもり？」）
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0f}" height="{h:.0f}" viewBox="0 0 {w:.2f} {h:.2f}">{r}{inner}</svg>'
 
 def horizontal(fg, sub, gd, bg, mh=200):
