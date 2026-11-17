@@ -19,7 +19,7 @@ colors=[('紺','#1b2436','27, 36, 54','93 / 64 / 15 / 86','#242424','明るい�
         ('金','#8f7a4c','143, 122, 76','44 / 45 / 78 / 20','#7c7c7c','明るい地のくちばしと WORKS'),
         ('クリーム','#ece5d3','236, 229, 211','10 / 9 / 20 / 0','#e5e5e5','暗い地の記号と RADIX'),
         ('明るい金','#c9a96a','201, 169, 106','25 / 33 / 66 / 3','#adadad','暗い地のくちばしと WORKS'),
-        ('夜の紺','#121a2a','18, 26, 42','95 / 65 / 14 / 92','#1a1a1a','アイコンの地。クリーム色の版を置く地のおすすめ')]
+        ('夜の紺','#121a2a','18, 26, 42','95 / 65 / 14 / 92','#1a1a1a','クリーム色の版を置く地のおすすめ。プロフィール画像とファビコンの地')]
 sw=''.join(f'<li class="swatch"><span class="chip" style="background:{h}"></span><div><strong>{n}</strong><code>{h}</code><code>RGB {rgb}</code><code>CMYK {cm}</code><code>グレー {g}</code><span>{u}</span></div></li>' for n,h,rgb,cm,g,u in colors)
 page=f'''<title>Radix Works ロゴ仕様書</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -107,14 +107,16 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
 </div></section>
 
 <section id="lockups"><h2><small>LOCKUPS</small>ロゴの種類</h2><div class="body">
-  <p>形は 6 種類です。アイコン以外は、明るい地に置く版（左）と、暗い地に置くクリーム色の版（右）があります。ファイルには地の色は入っていません。見本の地は置き場所の例です。</p>
+  <p>ロゴの形は 5 種類です。どれも明るい地に置く版（左）と、暗い地に置くクリーム色の版（右）があります。ファイルには地の色は入っていません。見本の地は置き場所の例です。</p>
   {variant('横長 1 行','wide','ウェブサイトの見出し、名刺、横に細長い場所。いちばんよく使う形')}
   {variant('横長 2 行','horizontal','横幅が足りない所。資料の表紙、署名')}
   {variant('縦長','vertical','正方形に近い場所。ポスター、表紙の中央')}
   {variant('記号の下に大きな文字','stacked','社名をはっきり見せたい横長の場所。看板、サイトの大きな見出し、動画の最後')}
-  {variant('記号だけ','mark','社名が別に書かれている所、小さな場所、SNS のプロフィール画像')}
-  <figure class="variant"><div class="small-row"><div class="plate icon-plate">{V('icon')}</div></div>
-  <figcaption><strong>アイコン</strong><span>アプリやサイトのアイコン。夜の紺の角丸の地に、クリーム色の記号</span><code>radixworks-icon.svg</code></figcaption></figure>
+  {variant('記号だけ','mark','社名が別に書かれている所、小さな場所、書類の角の印')}
+  <figure class="variant"><div class="small-row"><div class="plate icon-plate">{svg(L+'profile/radixworks-profile-on-white.svg','logo')}</div><div class="plate icon-plate">{svg(L+'profile/radixworks-profile-on-navy.svg','logo')}</div></div>
+  <figcaption><strong>プロフィール画像</strong><span>SNS（X・Instagram・LINE など）のプロフィール画像。正方形の地つきで、丸く切り取られても記号が欠けないよう、記号の一番外の点を丸の半径の 1/√φ（約 79%）の内側に収めている。色はほかの形と同じ 6 色</span><code>profile/radixworks-profile-on-white.svg ほか</code></figcaption></figure>
+  <figure class="variant"><div class="small-row"><div class="plate icon-plate">{svg(L+'favicon/favicon.svg','logo')}</div></div>
+  <figcaption><strong>ファビコン</strong><span>ブラウザのタブなどに出るサイトのアイコン。夜の紺の地に、クリーム色の記号。32px 以上なら目とくちばしが読める。16px では目が小さな点になる</span><code>favicon/favicon.svg・favicon.ico・favicon-16〜512.png・apple-touch-icon.png</code></figcaption></figure>
 </div></section>
 
 <section id="color"><h2><small>COLOR</small>色</h2><div class="body">
@@ -198,16 +200,13 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
     <li><code>radixworks-stacked-cream.svg</code><span>記号の下に大きな文字（暗い地用）</span></li>
     <li><code>radixworks-mark.svg</code><span>記号だけ（明るい地用）</span></li>
     <li><code>radixworks-mark-cream.svg</code><span>記号だけ（暗い地用）</span></li>
-    <li><code>radixworks-icon.svg</code><span>アイコン（角丸の地つき）</span></li>
   </ul>
   <p>グレーの版、一色の版、地の色を入れた版もあります（〇〇＝wide・horizontal・stacked・vertical・mark）。</p>
   <ul class="files">
     <li><code>radixworks-〇〇-gray.svg</code><span>グレーの版（明るい地用）</span></li>
     <li><code>radixworks-〇〇-gray-cream.svg</code><span>グレーの版（暗い地用）</span></li>
-    <li><code>radixworks-icon-gray.svg</code><span>アイコンのグレーの版</span></li>
     <li><code>radixworks-〇〇-black.svg</code><span>黒一色（明るい地用）</span></li>
     <li><code>radixworks-〇〇-white.svg</code><span>白一色（暗い地用）</span></li>
-    <li><code>radixworks-icon-black.svg</code><span>アイコンの一色の版（黒の角丸の地に白抜き）</span></li>
     <li><code>radixworks-〇〇-on-white.svg</code><span>地あり：白の地に、明るい地用のロゴ</span></li>
     <li><code>radixworks-〇〇-on-navy.svg</code><span>地あり：夜の紺の地に、クリーム色のロゴ</span></li>
     <li><code>radixworks-〇〇-gray-on-white.svg</code><span>地あり：白の地に、グレーの版</span></li>
@@ -215,7 +214,11 @@ footer {{ padding-block:40px; color:var(--sub); font-size:13px }}
     <li><code>radixworks-〇〇-black-on-white.svg</code><span>地あり：白の地に黒一色</span></li>
     <li><code>radixworks-〇〇-white-on-black.svg</code><span>地あり：黒の地に白一色</span></li>
   </ul>
-  <p class="note">地ありの版は ZIP の with-background に入っています。地の大きさは、まわりの余白を含めたロゴの外枠と同じです。</p>
+  <ul class="files">
+    <li><code>profile/radixworks-profile-〇〇.svg・.png</code><span>プロフィール画像（1024px の正方形。〇〇は地ありの版と同じ 6 色の名前）</span></li>
+    <li><code>favicon/</code><span>ファビコン（favicon.svg・favicon.ico・16〜512px の PNG・apple-touch-icon.png）</span></li>
+  </ul>
+  <p class="note">地ありの版は ZIP の with-background に、プロフィール画像とファビコンは profile と favicon に入っています。地の大きさは、まわりの余白を含めたロゴの外枠と同じです。</p>
   <p class="note">保存場所：radix-works.github.io の作業用の枝の brand/logo/svg（地なし）と brand/logo/svg-bg（地あり）。PNG の画像は brand/logo/png と brand/logo/png-bg にあります。</p>
 </div></section>
 <footer>Radix Works ロゴ仕様書　完成　2026年11月17日</footer>

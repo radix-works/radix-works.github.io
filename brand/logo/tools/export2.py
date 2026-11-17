@@ -101,6 +101,24 @@ def stacked_wide(fg, sub, gd, bg, mh=300, n=2.0, pos='center'):
     return svg(W, H, mark(k, mx, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
 
+def _fit_circle_scale(S, frac):
+    """記号の外枠の真ん中を正方形の真ん中に置いたとき、記号の一番外の点が半径 S/2×frac の丸に収まる倍率"""
+    import math
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    far = max(math.hypot(px - cx, py - cy) for poly in ([s] if s.geom_type == 'Polygon' else list(s.geoms)) for px, py in poly.exterior.coords)
+    return (S / 2 * frac) / far
+
+def profile(fg, gd, bg, S=1024):
+    """プロフィール画像：正方形の地。丸く切り取られても欠けないよう、記号を半径の 1/√φ の丸の中に収める"""
+    k = _fit_circle_scale(S, 1 / F[1] ** 0.5)
+    return svg(S, S, f'<rect width="{S}" height="{S}" fill="{bg}"/>' + mark(k, S / 2 - MW * k / 2, S / 2 - MH * k / 2, fg, gd))
+
+def favicon(S=64):
+    """ファビコン：夜の紺の角を少し丸めた地に、クリーム色の記号。記号の高さ＝一辺÷φ^0.5（小さくても目とくちばしが残る大きさ）"""
+    mh = S / F[1] ** 0.5; k = mh / MH
+    return svg(S, S, f'<rect width="{S}" height="{S}" rx="{S/F[4]:.2f}" fill="{NAVY}"/>' + mark(k, (S - MW * k) / 2, (S - MH * k) / 2, CREAM, GOLDD))
+
+
 if __name__ == '__main__':
     out = {
         'logo-horizontal': horizontal(INK, GOLD, GOLD, None),
@@ -109,7 +127,6 @@ if __name__ == '__main__':
         'logo-vertical-dark': vertical(CREAM, GOLDD, GOLDD, NAVY),
         'mark': mark_only(INK, GOLD, None),
         'mark-dark': mark_only(CREAM, GOLDD, NAVY),
-        'icon': icon(),
         'logo-wide': wide_small(INK, GOLD, GOLD, None, ratio=F[1]),            # 記号の高さ＝文字の高さ×φ（2026-11-17 根本さん）
         'logo-wide-dark': wide_small(CREAM, GOLDD, GOLDD, NAVY, ratio=F[1]),
         # 記号の下に大きな文字：文字＝記号÷φ²、ペンギンは RADIX の真ん中（2026-11-17 根本さん「3で」）

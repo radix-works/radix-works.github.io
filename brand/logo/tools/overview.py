@@ -13,12 +13,12 @@ def sheet(out_name, pairs, bgcol, icon=None):
             out.paste(im,(x+(cw-im.width)//2,y+(ch-im.height)//2),im); x=W-30-cw
         y+=ch+32
     if icon:
-        d.text((30,y),'アイコン',fill=(60,68,84),font=f); y+=48; x=30
+        d.text((30,y),'プロフィール画像',fill=(60,68,84),font=f); y+=48; x=30
         for p in icon:
             im=Image.open(O+p).convert('RGBA'); im=im.resize((440,440),Image.LANCZOS); out.paste(im,(x,y),im); x+=500
     out.save(O+out_name)
-sheet('overview.png', lambda k:[(f'png/radixworks-{k}.png',(251,252,253,255)),(f'png/radixworks-{k}-cream.png',(18,26,42,255))], (226,230,236), ['png/radixworks-icon.png'])
+sheet('overview.png', lambda k:[(f'png/radixworks-{k}.png',(251,252,253,255)),(f'png/radixworks-{k}-cream.png',(18,26,42,255))], (226,230,236), ['profile/radixworks-profile-on-white.png','profile/radixworks-profile-on-navy.png'])
 sheet('overview-bg.png', lambda k:[(f'png-bg/radixworks-{k}-on-white.png',None),(f'png-bg/radixworks-{k}-on-navy.png',None)], (200,205,214))
-sheet('overview-gray.png', lambda k:[(f'png-bg/radixworks-{k}-gray-on-white.png',None),(f'png-bg/radixworks-{k}-gray-on-black.png',None)], (200,200,200), ['png/radixworks-icon-gray.png'])
+sheet('overview-gray.png', lambda k:[(f'png-bg/radixworks-{k}-gray-on-white.png',None),(f'png-bg/radixworks-{k}-gray-on-black.png',None)], (200,200,200), ['profile/radixworks-profile-gray-on-white.png','profile/radixworks-profile-gray-on-black.png'])
 print('ok')
-sheet('overview-mono.png', lambda k:[(f'png-bg/radixworks-{k}-black-on-white.png',None),(f'png-bg/radixworks-{k}-white-on-black.png',None)], (200,200,200), ['png/radixworks-icon-black.png'])
+sheet('overview-mono.png', lambda k:[(f'png-bg/radixworks-{k}-black-on-white.png',None),(f'png-bg/radixworks-{k}-white-on-black.png',None)], (200,200,200), ['profile/radixworks-profile-black-on-white.png','profile/radixworks-profile-white-on-black.png'])
