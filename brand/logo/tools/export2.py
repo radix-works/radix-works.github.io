@@ -51,10 +51,10 @@ def icon(S=1024):
     kk = S / F[1] / MH
     return svg(S, S, f'<rect width="{S}" height="{S}" rx="{S*0.22:.0f}" fill="{NAVY}"/>' + mark(kk, (S - MW * kk) / 2, (S - MH * kk) / 2, CREAM, GOLDD))
 
-def horizontal1(fg, sub, gd, bg, mh=200, n=3):
+def horizontal1(fg, sub, gd, bg, mh=200, n=3, scale=1.0):
     """横長 1 行：記号の右に RADIX WORKS。大文字の高さ＝記号の高さ÷φⁿ、記号との間＝大文字の高さ÷φ、
     語の間＝大文字の高さ÷φ、文字の上のあき：下のあき＝1：φ"""
-    k = mh / MH; c = mh / F[n]; gap = c / F[1]; sp = c / F[1]; pad = mh / F[3] * F[1] / F[1]
+    k = mh / MH; c = mh / F[n] * scale; gap = c / F[1]; sp = c / F[1]; pad = mh / F[3]
     t2 = T2 / F[1]
     _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, t2)
     tx = pad + MW * k + gap
@@ -62,6 +62,19 @@ def horizontal1(fg, sub, gd, bg, mh=200, n=3):
     d1, _ = text_hb('RADIX', J1, c, tx, base, T1 * 2, PAIRS); d2, _ = text_hb('WORKS', J2, c, tx + wr + sp, base, t2)
     W = tx + wr + sp + ww + pad; H = mh + 2 * pad
     return svg(W, H, mark(k, pad, pad, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
+
+
+def wide_small(fg, sub, gd, bg, c=80, ratio=1.0):
+    """横長（記号を小さく）：記号の高さ＝大文字の高さ×ratio。記号の縦の真ん中＝文字の縦の真ん中。
+    記号との間＝大文字の高さ÷φ、語の間＝大文字の高さ÷φ"""
+    mh = c * ratio; k = mh / MH; gap = c / F[1]; sp = c / F[1]; t2 = T2 / F[1]
+    pad = max(mh, c) / F[2]
+    _, wr = text_hb('RADIX', J1, c, 0, 0, T1 * 2, PAIRS); _, ww = text_hb('WORKS', J2, c, 0, 0, t2)
+    H = max(mh, c) + 2 * pad; cy = H / 2
+    tx = pad + MW * k + gap; base = cy + c / 2
+    d1, _ = text_hb('RADIX', J1, c, tx, base, T1 * 2, PAIRS); d2, _ = text_hb('WORKS', J2, c, tx + wr + sp, base, t2)
+    W = tx + wr + sp + ww + pad
+    return svg(W, H, mark(k, pad, cy - mh / 2, fg, gd) + f'<path d="{d1}" fill="{fg}"/><path d="{d2}" fill="{sub}"/>', bg)
 
 
 if __name__ == '__main__':
@@ -73,8 +86,8 @@ if __name__ == '__main__':
         'mark': mark_only(INK, GOLD, None),
         'mark-dark': mark_only(CREAM, GOLDD, NAVY),
         'icon': icon(),
-        'logo-wide': horizontal1(INK, GOLD, GOLD, None),
-        'logo-wide-dark': horizontal1(CREAM, GOLDD, GOLDD, NAVY),
+        'logo-wide': wide_small(INK, GOLD, GOLD, None, ratio=F[1]),            # 記号の高さ＝文字の高さ×φ（2026-11-17 根本さん）
+        'logo-wide-dark': wide_small(CREAM, GOLDD, GOLDD, NAVY, ratio=F[1]),
     }
     for n, t in out.items(): open(f'{O}/{n}.svg', 'w').write(t)
     print('ok', list(out))
