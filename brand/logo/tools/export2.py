@@ -22,11 +22,13 @@ def svg(w, h, inner, bg=None):
     r = ''   # ロゴのファイルには地を入れない（2026-11-17 根本さん「ロゴって背景も含むつもり？」）
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0f}" height="{h:.0f}" viewBox="0 0 {w:.2f} {h:.2f}">{r}{inner}</svg>'
 
-def horizontal(fg, sub, gd, bg, mh=200):
+def horizontal(fg, sub, gd, bg, mh=200, n1=None):
     """横長：記号の右に RADIX／WORKS を左寄せ。RADIX＝記号の高さ÷φ³、WORKS＝RADIX÷φ、行間＝WORKS÷φ、
     記号との間＝RADIX÷φ、文字のかたまりの上のあき：下のあき＝1：φ"""
-    k = mh / MH; c1 = mh / F[3]; c2 = c1 / F[1]; lg = c2 / F[1]; gap = c1 / F[1]
-    pad = c1 * F[1]
+    # 文字のかたまりの高さ（RADIX＋行の間＋WORKS＝RADIX の 2 倍）：記号の高さ＝1：φ（2026-11-17 根本さん）
+    c1 = mh / (2 * F[1]) if n1 is None else mh / PHI ** n1
+    k = mh / MH; c2 = c1 / F[1]; lg = c2 / F[1]; gap = c1 / F[1]
+    pad = mh / F[3] * F[1]
     _, w1 = text_hb('RADIX', J1, c1, 0, 0, T1, PAIRS)
     bh = c1 + lg + c2; cy = pad + (mh - bh) / F[2] + bh / 2
     tx = pad + MW * k + gap; ty1 = cy - bh / 2 + c1; ty2 = ty1 + lg + c2

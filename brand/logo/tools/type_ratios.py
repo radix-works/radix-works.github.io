@@ -12,20 +12,21 @@ def hd(y,x1,x2,col,lab,above=True):
 b=''; Y0=0
 # ① 横長 2 行
 mh=260; X=160; Y=Y0+110
-k=mh/MH; c1=mh/F[3]; c2=c1/F[1]; lg=c2/F[1]; gap=c1/F[1]
+k=mh/MH; c1=mh/(2*F[1]); c2=c1/F[1]; lg=c2/F[1]; gap=c1/F[1]
 _,w1=text_hb('RADIX',J1,c1,0,0,T1,PAIRS)
 bh=c1+lg+c2; cy=Y+(mh-bh)/F[2]+bh/2; tx=X+MW*k+gap; ty1=cy-bh/2+c1; ty2=ty1+lg+c2
 d1,_=text_hb('RADIX',J1,c1,tx,ty1,T1,PAIRS); d2,_=text_hb('WORKS',J2,c2,tx,ty2,T2)
 b+=T('横長 2 行',30,Y0+40,24,SUB)
 b+=mark(k,X,Y,INK,GOLD)+f'<path d="{d1}" fill="{INK}" fill-opacity=".85"/><path d="{d2}" fill="{GOLD}" fill-opacity=".85"/>'
 b+=vd(X-40,Y,Y+mh,ACC,'記号の高さ 1',-1)
-b+=vd(tx+w1+40,ty1-c1,ty1,BLUE,'RADIX 1/φ³')
-b+=vd(tx+w1+40,ty2-c2,ty2,BLUE,'WORKS 1/φ⁴')
-b+=vd(tx+w1+190,ty1,ty2-c2,GRN,'行の間 1/φ⁵')
-b+=vd(tx+w1+330,Y,ty1-c1,PUR,'上のあき 1')
-b+=vd(tx+w1+330,ty2,Y+mh,PUR,'下のあき φ')
+b+=vd(tx+w1+40,ty1-c1,ty1,BLUE,'RADIX 1/(2φ)')
+b+=vd(tx+w1+40,ty2-c2,ty2,BLUE,'WORKS 1/(2φ²)')
+b+=vd(tx+w1+150,ty1,ty2-c2,GRN,'行の間 1/(2φ³)')
+b+=vd(tx+w1+290,ty1-c1,ty2,ACC,'文字のかたまり 1/φ')
+b+=vd(tx+w1+470,Y,ty1-c1,PUR,'上のあき 1')
+b+=vd(tx+w1+470,ty2,Y+mh,PUR,'下のあき φ')
 b+=hd(Y+mh+40,X+MW*k,tx,ACC,'記号との間＝RADIX÷φ',False)
-b+=f'<g stroke="#cfd6df" stroke-dasharray="3 4"><line x1="{X-60}" y1="{Y}" x2="{tx+w1+360}" y2="{Y}"/><line x1="{X-60}" y1="{Y+mh}" x2="{tx+w1+360}" y2="{Y+mh}"/><line x1="{X+MW*k}" y1="{Y-10}" x2="{X+MW*k}" y2="{Y+mh+50}"/><line x1="{tx}" y1="{Y-10}" x2="{tx}" y2="{Y+mh+50}"/></g>'
+b+=f'<g stroke="#cfd6df" stroke-dasharray="3 4"><line x1="{X-60}" y1="{Y}" x2="{tx+w1+500}" y2="{Y}"/><line x1="{X-60}" y1="{Y+mh}" x2="{tx+w1+500}" y2="{Y+mh}"/><line x1="{X+MW*k}" y1="{Y-10}" x2="{X+MW*k}" y2="{Y+mh+50}"/><line x1="{tx}" y1="{Y-10}" x2="{tx}" y2="{Y+mh+50}"/></g>'
 Y0=Y+mh+110
 # ② 横長 1 行
 c=80; mh=c*F[1]; k=mh/MH; X=160; Y=Y0+90; gap=c/F[1]; sp=c/F[1]; t2=T2/F[1]
