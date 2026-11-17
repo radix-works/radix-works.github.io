@@ -2,7 +2,8 @@ import sys, math; sys.path.insert(0,'.')
 import peng
 from peng3 import *
 INK,PAPER,GOLD,NAVY,CREAM,LINE,ACC='#1b2436','#fbfcfd','#8f7a4c','#121a2a','#ece5d3','#c9a96a','#ff7a45'
-s,body,beak,circ,pts=build(dict(P3,bR=6,bA=213.45))
+s,body,beak,circ,pts=build(PA)
+BASE=PA['base']; EY=PA['ey']
 x0,y0,x1,y1=s.bounds
 # --- 1) 組み立て図 ---
 S=1400; k=S/2.2/(y1-y0); OX=S*0.5-(x0+x1)/2*k; OY=S*0.44-(y0+y1)/2*k
@@ -19,10 +20,10 @@ for c,r,lab,role in circ:
         b+=f'<circle cx="{X(c[0]):.1f}" cy="{Y(c[1]):.1f}" r="3.2" fill="{LINE}"/>'
 # 揃えの線（くちばしの先と足の先の縦、目とくちばしの横、地面、頭の中心）
 b+=f'<g stroke="{ACC}" stroke-width="1.2" stroke-dasharray="6 6" opacity=".9">'
-b+=f'<line x1="{X(F[5])}" y1="{Y(y0)-30}" x2="{X(F[5])}" y2="{Y(F[6])+30}"/>'
-b+=f'<line x1="{X(x0)-30}" y1="{Y(-1)}" x2="{X(F[5])+30}" y2="{Y(-1)}"/>'
-b+=f'<line x1="{X(x0)-60}" y1="{Y(F[6])}" x2="{X(F[5])+60}" y2="{Y(F[6])}"/>'
-b+=f'<line x1="{X(x0)-30}" y1="{Y(0)}" x2="{X(F[4])+30}" y2="{Y(0)}"/><line x1="{X(0)}" y1="{Y(-F[4])-30}" x2="{X(0)}" y2="{Y(F[6])+30}"/></g>'
+b+=f'<line x1="{X(F[5])}" y1="{Y(y0)-30}" x2="{X(F[5])}" y2="{Y(BASE)+30}"/>'
+b+=f'<line x1="{X(x0)-30}" y1="{Y(EY)}" x2="{X(F[5])+30}" y2="{Y(EY)}"/>'
+b+=f'<line x1="{X(x0)-60}" y1="{Y(BASE)}" x2="{X(F[5])+60}" y2="{Y(BASE)}"/>'
+b+=f'<line x1="{X(x0)-30}" y1="{Y(0)}" x2="{X(F[4])+30}" y2="{Y(0)}"/><line x1="{X(0)}" y1="{Y(-F[4])-30}" x2="{X(0)}" y2="{Y(BASE)+30}"/></g>'
 for v in pts.values(): b+=f'<circle cx="{X(v[0]):.1f}" cy="{Y(v[1]):.1f}" r="4.5" fill="{ACC}"/>'
 def T(t,x,y,sz=17,fill=LINE,anc='start'): return f'<text x="{x:.1f}" y="{y:.1f}" font-family="Jost" font-size="{sz}" fill="{fill}" text-anchor="{anc}">{t}</text>'
 # 円の書き添え（円周の上、中心から右上 45°の所）
@@ -31,12 +32,12 @@ for c,r,lab,role in circ:
     a=math.radians(-55 if r<10 else -70); tx,ty=X(c[0]+r*math.cos(a)),Y(c[1]+r*math.sin(a))
     if 20<tx<S-60 and 30<ty<S-200: b+=T(lab,tx+6,ty-6,16)
 # 目の書き添えは引き出し線で外へ
-ex,ey=X(F[1]),Y(-1.0)
-b+=f'<line x1="{ex}" y1="{Y(-1-R5)}" x2="{ex-250}" y2="{Y(-1-R5)-150}" stroke="{LINE}" stroke-width="1"/>'+T("目の輪 √5　黒目 √5/φ",ex-256,Y(-1-R5)-156,15,LINE,"end")
+ex,ey=X(F[1]),Y(EY)
+b+=f'<line x1="{ex}" y1="{Y(EY-R5)}" x2="{ex-250}" y2="{Y(EY-R5)-150}" stroke="{LINE}" stroke-width="1"/>'+T("目の輪 √5　黒目 √5/φ",ex-256,Y(EY-R5)-156,15,LINE,"end")
 # 高さの寸法線
 hx=X(x0)-70
-b+=f'<g stroke="{ACC}" stroke-width="1.2"><line x1="{hx}" y1="{Y(-F[4])}" x2="{hx}" y2="{Y(F[6])}"/><line x1="{hx-8}" y1="{Y(-F[4])}" x2="{hx+8}" y2="{Y(-F[4])}"/><line x1="{hx-8}" y1="{Y(0)}" x2="{hx+8}" y2="{Y(0)}"/><line x1="{hx-8}" y1="{Y(F[6])}" x2="{hx+8}" y2="{Y(F[6])}"/></g>'
-b+=T('φ⁴',hx-12,Y(-F[4]/2)+6,17,ACC,'end')+T('φ⁶',hx-12,Y(F[6]/2)+6,17,ACC,'end')
+b+=f'<g stroke="{ACC}" stroke-width="1.2"><line x1="{hx}" y1="{Y(-F[4])}" x2="{hx}" y2="{Y(BASE)}"/><line x1="{hx-8}" y1="{Y(-F[4])}" x2="{hx+8}" y2="{Y(-F[4])}"/><line x1="{hx-8}" y1="{Y(0)}" x2="{hx+8}" y2="{Y(0)}"/><line x1="{hx-8}" y1="{Y(BASE)}" x2="{hx+8}" y2="{Y(BASE)}"/></g>'
+b+=T('φ⁴',hx-12,Y(-F[4]/2)+6,17,ACC,'end')+T('φ⁵+φ³',hx-12,Y(BASE/2)+6,17,ACC,'end')
 # 下の帯
 by=S-170
 b+=f'<rect x="0" y="{by}" width="{S}" height="{S-by}" fill="{NAVY}"/><line x1="48" y1="{by}" x2="{S-48}" y2="{by}" stroke="#fff" stroke-opacity=".12"/>'

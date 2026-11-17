@@ -67,3 +67,10 @@ if __name__ == '__main__':
     s, body, beak, circ, pts = build(P3)
     print({k: (round(v[0], 3), round(v[1], 3)) for k, v in pts.items()})
     print(s.bounds)
+
+# 仮完成（2026-11-17 根本さん「黄金比aのほうを仮完成にして」）：全部黄金比 A
+_A = lambda n: 360 / F[n]
+PA = dict(P3, bR=6, base=F[5] + F[3], ey=-F[1], px=1 / F[2],
+          bk1=-_A(6), bk2=_A(7), lA=_A(5), lB=_A(4), bB=_A(2), bA=216.95)
+# 前の仮完成（ふっくら）
+PLUMP = dict(P3, bR=6, bA=213.45)

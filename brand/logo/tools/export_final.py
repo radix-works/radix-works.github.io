@@ -5,7 +5,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 O='/home/user/radix-works.github.io/brand/logo'; FD='fonts'
 INK,PAPER,GOLD,NAVY,CREAM,GOLDD='#1b2436','#fbfcfd','#8f7a4c','#121a2a','#ece5d3','#c9a96a'
-FINAL=dict(P3,bR=6,bA=213.45)   # 仮完成：ふっくら（2026-11-17 根本さん）
+FINAL=PA   # 仮完成：全部黄金比 A（2026-11-17 根本さん）
 s,body,beak,circ,pts=build(FINAL)
 x0,y0,x1,y1=s.bounds; MW,MH=x1-x0,y1-y0
 def text(txt,ff,cap,x,y,track=0.0):
@@ -21,7 +21,7 @@ def svg(w,h,body_,bg=None):
     r=f'<rect width="{w:.0f}" height="{h:.0f}" fill="{bg}"/>' if bg else ''
     return f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.0f}" height="{h:.0f}" viewBox="0 0 {w:.1f} {h:.1f}">{r}{body_}</svg>'
 def save(n,t): open(f'{O}/{n}.svg','w').write(t)
-k=40; pad=40
+k=40; pad=k*F[3]
 save('mark',svg(MW*k+2*pad,MH*k+2*pad,mark(k,pad,pad,INK,GOLD)))
 save('mark-dark',svg(MW*k+2*pad,MH*k+2*pad,mark(k,pad,pad,CREAM,GOLDD),NAVY))
 def horiz(fg,sub,gd,bg):
