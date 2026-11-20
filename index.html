@@ -64,6 +64,11 @@ section:last-of-type{border-bottom:0}
 .legal a:hover{color:var(--ink)}
 .app .pic{background:var(--shade);display:flex;align-items:center;min-width:0}
 .app .pic img{width:100%;height:auto;display:block}
+.apps{display:grid;gap:16px;min-width:0}
+.app.small{display:block}
+.app.small .txt{padding:28px 40px;display:grid;gap:6px;justify-items:start}
+.app.small .legal{margin-top:10px;padding-top:14px;width:100%}
+.badge.soon{color:var(--sub);border-color:var(--line)}
 .contact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .contact .mail{grid-column:1/-1}
 .contact a{display:block;text-decoration:none;background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:24px 26px;min-width:0}
@@ -88,6 +93,7 @@ footer small{font-family:"Jost",sans-serif;letter-spacing:.12em;color:var(--pale
   .head{grid-template-columns:1fr;gap:20px}
   .app{grid-template-columns:1fr}
   .app .txt{padding:26px 22px}
+  .app.small .txt{padding:22px 22px 24px}
   .app .pic{order:-1}
 }
 </style>
@@ -105,6 +111,7 @@ footer small{font-family:"Jost",sans-serif;letter-spacing:.12em;color:var(--pale
 <main>
 <section id="apps"><div class="wrap head">
   <div><div class="en">Apps</div><h2>アプリ</h2></div>
+  <div class="apps">
   <div class="app">
     <div class="txt">
       <div class="top"><img src="deckmatch/img/icon.png" alt="" width="64" height="64"><div><span class="badge">配信中</span><h3>デックマッチ</h3></div></div>
@@ -123,6 +130,17 @@ footer small{font-family:"Jost",sans-serif;letter-spacing:.12em;color:var(--pale
       </div>
     </div>
     <div class="pic"><img src="deckmatch/img/feature.png" alt="デックマッチの対戦画面" width="1024" height="500"></div>
+  </div>
+  <!-- 2026-11-20 FTL Incremental Idle の枠（根本さん「枠足すに決まってるだろ」）。アイコンと紹介の文はまだ決まっていないので載せない。決まったら足す -->
+  <div class="app small">
+    <div class="txt">
+      <span class="badge soon">準備中</span>
+      <h3>FTL Incremental Idle</h3>
+      <div class="legal">
+        <a href="ftl-incremental/privacy/">プライバシーポリシー</a>
+      </div>
+    </div>
+  </div>
   </div>
 </div></section>
 
