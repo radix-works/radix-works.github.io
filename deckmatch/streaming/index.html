@@ -4,32 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>デックマッチ　配信・動画投稿ガイドライン</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root { --ground:#eceff3; --paper:#fbfcfd; --ink:#1b2436; --sub:#4a5468; --line:#cfd6df; --gold:#8f7a4c; --wine:#823b4a; }
+/* 2026-11-20 一番上のページ（案 A「白い紙」）と同じ見た目にそろえた（根本さん「見た目そろえるに決まってるし」） */
+:root { --bg:#f7f5ef; --paper:#fffefb; --ink:#1b2436; --sub:#5a6273; --line:#e2ddd0; --gold:#8f7a4c; --night:#121a2a; --cream:#ece5d3; --pale:#a7afbf; --head:#f3efe4; }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--ground); color:var(--ink); font-family: "Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif; line-height:1.85; font-size:15px; }
-main { max-width: 760px; margin: 0 auto; padding: 32px 18px 64px; }
-.sheet { background:var(--paper); border:1.5px solid var(--ink); border-radius:6px; box-shadow:0 3px 0 var(--ink); padding: 28px 22px; }
-h1 { font-size: 24px; line-height:1.4; margin: 0 0 6px; }
-.brand { margin: 0; line-height: 0; }
-.brand img { display: block; height: 88px; width: auto; max-width: none; margin: -19px 0 0 -19px; }
-h2 { font-size: 18px; margin: 30px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-h3 { font-size: 15.5px; margin: 20px 0 6px; color: var(--sub); }
-p, li { color: var(--ink); }
-ul, ol { padding-left: 1.4em; }
-hr { border: 0; height: 0; margin: 0; }
-a { color: var(--wine); word-break: break-all; }
-.table { overflow-x: auto; margin: 10px 0; }
-table { border-collapse: collapse; width: 100%; font-size: 14px; }
-th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
-th { background: #eef1f5; white-space: nowrap; }
-.todo { background: #fbe9c9; padding: 0 3px; border-radius: 3px; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif; line-height:1.9; font-size:15px; letter-spacing:.02em; }
+.wrap { max-width:1120px; margin:0 auto; padding-left:max(24px,env(safe-area-inset-left)); padding-right:max(24px,env(safe-area-inset-right)); }
+header.site { position:sticky; top:0; z-index:5; background:rgba(247,245,239,.92); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+header.site .wrap { display:flex; align-items:center; justify-content:space-between; height:68px; }
+header.site .home { display:block; line-height:0; margin-left:-10px; }
+header.site .home img { height:34px; width:auto; }
+header.site nav { display:flex; gap:28px; }
+header.site nav a { font-family:"Jost",sans-serif; font-size:13px; letter-spacing:.18em; text-decoration:none; font-weight:500; color:var(--ink); }
+main { max-width:800px; margin:0 auto; padding:56px max(24px,env(safe-area-inset-right)) 96px max(24px,env(safe-area-inset-left)); }
+.sheet { background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:44px 48px 48px; }
+.eyebrow { font-family:"Jost",sans-serif; letter-spacing:.24em; text-transform:uppercase; font-weight:500; font-size:12px; color:var(--gold); margin:0 0 8px; }
+h1 { font-size:26px; line-height:1.5; margin:0 0 18px; letter-spacing:.04em; }
+h2 { font-size:18px; margin:40px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); letter-spacing:.04em; }
+h3 { font-size:15.5px; margin:24px 0 6px; color:var(--sub); }
+p, li { color:var(--ink); }
+ul, ol { padding-left:1.4em; }
+hr { border:0; height:0; margin:0; }
+a { color:var(--ink); text-decoration-color:var(--gold); text-underline-offset:3px; word-break:break-all; }
+a:hover { color:var(--gold); }
+a:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+.table { overflow-x:auto; margin:10px 0; }
+table { border-collapse:collapse; width:100%; font-size:14px; }
+th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+th { background:var(--head); white-space:nowrap; }
+.todo { background:#fbe9c9; padding:0 3px; border-radius:3px; }
+footer.site { background:var(--night); color:var(--cream); padding:56px 0 calc(40px + env(safe-area-inset-bottom)); }
+footer.site .wrap { display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap; }
+footer.site img { height:30px; width:auto; margin-left:-8px; display:block; }
+footer.site small { font-family:"Jost",sans-serif; letter-spacing:.12em; color:var(--pale); }
+@media (max-width:760px) {
+  .wrap { padding-left:max(16px,env(safe-area-inset-left)); padding-right:max(16px,env(safe-area-inset-right)); }
+  header.site .wrap { height:58px; }
+  header.site .home img { height:28px; }
+  header.site nav { gap:18px; }
+  header.site nav a { font-size:12px; letter-spacing:.14em; }
+  main { padding:28px max(16px,env(safe-area-inset-right)) 64px max(16px,env(safe-area-inset-left)); }
+  .sheet { padding:28px 20px 32px; }
+  h1 { font-size:22px; }
+  th { white-space:normal; width:7.5em; }
+  th, td { padding:8px; }
+}
 </style>
 </head>
 <body>
+<header class="site"><div class="wrap"><a class="home" href="../../"><img src="../../assets/site/radixworks-wide.svg" alt="Radix Works" width="1147" height="228"></a><nav><a href="../../#apps">APPS</a><a href="../../#contact">CONTACT</a></nav></div></header>
 <main>
 <div class="sheet">
-<div class="brand"><img src="../../assets/logo/radixworks-horizontal.svg" alt="Radix Works" width="161" height="88"></div>
+<div class="eyebrow">Deck Match</div>
 <h1>デックマッチ　配信・動画投稿ガイドライン</h1>
 <p>Radix Works（以下「当方」）は、スマートフォン向けゲーム「デックマッチ」（以下「本アプリ」）のプレイ映像の配信や動画の投稿を歓迎しています。安心して楽しんでいただけるよう、次のとおり定めます。</p>
 <p>施行日：2026年10月6日</p>
@@ -90,5 +120,6 @@ th { background: #eef1f5; white-space: nowrap; }
 </ul>
 </div>
 </main>
+<footer class="site"><div class="wrap"><img src="../../assets/site/radixworks-wide-cream.svg" alt="Radix Works" width="1147" height="228"><small>© 2026 Radix Works</small></div></footer>
 </body>
 </html>
